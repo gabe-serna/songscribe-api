@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from moseca.app.service.vocal_remover import layers
+from moseca.api.service.vocal_remover import layers
 
 
 class BaseNet(nn.Module):

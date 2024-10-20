@@ -8,7 +8,7 @@ from stqdm import stqdm
 import streamlit as st
 from pydub import AudioSegment
 
-from moseca.app.service.vocal_remover import nets
+from moseca.api.service.vocal_remover import nets
 
 
 if os.environ.get("LIMIT_CPU", False):

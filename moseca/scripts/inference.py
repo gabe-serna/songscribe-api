@@ -4,8 +4,8 @@ import warnings
 
 from pydub import AudioSegment
 
-from app.service.vocal_remover.runner import load_model, separate
-from app.service.demucs_runner import separator
+from moseca.api.service.vocal_remover.runner import load_model, separate
+from moseca.api.service.demucs_runner import separator
 
 warnings.simplefilter("ignore", UserWarning)
 warnings.simplefilter("ignore", FutureWarning)

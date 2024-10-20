@@ -11,45 +11,41 @@ from demucs.audio import save_audio
 from demucs.pretrained import get_model_from_args, ModelLoadingError
 from demucs.separate import load_track
 
-import streamlit as st
 
-
-@st.cache_data(show_spinner=False)
 def separator(
     tracks: List[Path],
     out: Path,
     model: str,
-    shifts: int,
-    overlap: float,
-    stem: str,
-    int24: bool,
-    float32: bool,
-    clip_mode: str,
-    mp3: bool,
-    mp3_bitrate: int,
-    verbose: bool,
+    shifts: int = 1,
+    overlap: float = 0.25,
+    stem: str = None,
+    int24: bool = False,
+    float32: bool = False,
+    clip_mode: str = "rescale",
+    mp3: bool = True,
+    mp3_bitrate: int = 320,
+    verbose: bool = False,
     *args,
     **kwargs,
 ):
-    """Separate the sources for the given tracks
+    """
+    Separate the sources for the given tracks.
 
     Args:
-        tracks (Path): Path to tracks
-        out (Path): Folder where to put extracted tracks. A subfolder with the model name will be
-                    created.
-        model (str): Model name
+        tracks (List[Path]): List of paths to the tracks.
+        out (Path): Output directory where extracted tracks will be saved.
+        model (str): Model name.
         shifts (int): Number of random shifts for equivariant stabilization.
                       Increase separation time but improves quality for Demucs.
                       10 was used in the original paper.
-        overlap (float): Overlap
+        overlap (float): Overlap between the splits. 0 means no overlap.
         stem (str): Only separate audio into {STEM} and no_{STEM}.
-        int24 (bool): Save wav output as 24 bits wav.
-        float32 (bool): Save wav output as float32 (2x bigger).
-        clip_mode (str): Strategy for avoiding clipping: rescaling entire signal if necessary
-                        (rescale) or hard clipping (clamp).
-        mp3 (bool): Convert the output wavs to mp3.
-        mp3_bitrate (int): Bitrate of converted mp3.
-        verbose (bool): Verbose
+        int24 (bool): Save WAV output as 24 bits.
+        float32 (bool): Save WAV output as float32 (2x bigger).
+        clip_mode (str): Strategy for avoiding clipping: 'rescale' or 'clamp'.
+        mp3 (bool): Convert the output WAVs to MP3.
+        mp3_bitrate (int): Bitrate of converted MP3 files.
+        verbose (bool): Verbose output.
     """
 
     if os.environ.get("LIMIT_CPU", False):
@@ -60,10 +56,8 @@ def separator(
         # multiple cores are available.
         jobs = os.cpu_count()
 
-    if th.cuda.is_available():
-        device = "cuda"
-    else:
-        device = "cpu"
+    device = "cuda" if th.cuda.is_available() else "cpu"
+
     args = argparse.Namespace()
     args.tracks = tracks
     args.out = out
@@ -91,10 +85,10 @@ def separator(
         fatal(error.args[0])
 
     if args.segment is not None and args.segment < 8:
-        fatal("Segment must greater than 8. ")
+        fatal("Segment must be greater than 8.")
 
     if ".." in args.filename.replace("\\", "/").split("/"):
-        fatal('".." must not appear in filename. ')
+        fatal('".." must not appear in filename.')
 
     if isinstance(model, BagOfModels):
         print(
@@ -108,18 +102,20 @@ def separator(
         if args.segment is not None:
             model.segment = args.segment
 
-    model.cpu()
+    model.to(device)
     model.eval()
 
     if args.stem is not None and args.stem not in model.sources:
         fatal(
-            'error: stem "{stem}" is not in selected model. STEM must be one of {sources}.'.format(
-                stem=args.stem, sources=", ".join(model.sources)
-            )
+            f'Error: stem "{args.stem}" is not in selected model. '
+            f"STEM must be one of {', '.join(model.sources)}."
         )
-    out = args.out / args.name
-    out.mkdir(parents=True, exist_ok=True)
-    print(f"Separated tracks will be stored in {out.resolve()}")
+
+    out_dir = args.out / args.name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if verbose:
+        print(f"Separated tracks will be stored in {out_dir.resolve()}")
+
     for track in args.tracks:
         if not track.exists():
             print(
@@ -128,7 +124,10 @@ def separator(
                 file=sys.stderr,
             )
             continue
-        print(f"Separating track {track}")
+
+        if verbose:
+            print(f"Separating track {track}")
+
         wav = load_track(track, model.audio_channels, model.samplerate)
 
         ref = wav.mean(0)
@@ -140,15 +139,12 @@ def separator(
             shifts=args.shifts,
             split=args.split,
             overlap=args.overlap,
-            progress=True,
+            progress=verbose,
             num_workers=args.jobs,
         )[0]
         sources = sources * ref.std() + ref.mean()
 
-        if args.mp3:
-            ext = "mp3"
-        else:
-            ext = "wav"
+        ext = "mp3" if args.mp3 else "wav"
         kwargs = {
             "samplerate": model.samplerate,
             "bitrate": args.mp3_bitrate,
@@ -156,35 +152,40 @@ def separator(
             "as_float": args.float32,
             "bits_per_sample": 24 if args.int24 else 16,
         }
+
+        track_name = track.name.rsplit(".", 1)[0]
+        track_ext = track.name.rsplit(".", 1)[-1]
+
         if args.stem is None:
             for source, name in zip(sources, model.sources):
-                stem = out / args.filename.format(
-                    track=track.name.rsplit(".", 1)[0],
-                    trackext=track.name.rsplit(".", 1)[-1],
+                stem_path = out_dir / args.filename.format(
+                    track=track_name,
+                    trackext=track_ext,
                     stem=name,
                     ext=ext,
                 )
-                stem.parent.mkdir(parents=True, exist_ok=True)
-                save_audio(source, str(stem), **kwargs)
+                stem_path.parent.mkdir(parents=True, exist_ok=True)
+                save_audio(source, str(stem_path), **kwargs)
         else:
             sources = list(sources)
-            stem = out / args.filename.format(
-                track=track.name.rsplit(".", 1)[0],
-                trackext=track.name.rsplit(".", 1)[-1],
+            stem_path = out_dir / args.filename.format(
+                track=track_name,
+                trackext=track_ext,
                 stem=args.stem,
                 ext=ext,
             )
-            stem.parent.mkdir(parents=True, exist_ok=True)
-            save_audio(sources.pop(model.sources.index(args.stem)), str(stem), **kwargs)
-            # Warning : after poping the stem, selected stem is no longer in the list 'sources'
+            stem_path.parent.mkdir(parents=True, exist_ok=True)
+            index = model.sources.index(args.stem)
+            save_audio(sources.pop(index), str(stem_path), **kwargs)
+            # After popping the stem, the selected stem is no longer in the list 'sources'
             other_stem = th.zeros_like(sources[0])
-            for i in sources:
-                other_stem += i
-            stem = out / args.filename.format(
-                track=track.name.rsplit(".", 1)[0],
-                trackext=track.name.rsplit(".", 1)[-1],
+            for src in sources:
+                other_stem += src
+            stem_path = out_dir / args.filename.format(
+                track=track_name,
+                trackext=track_ext,
                 stem="no_" + args.stem,
                 ext=ext,
             )
-            stem.parent.mkdir(parents=True, exist_ok=True)
-            save_audio(other_stem, str(stem), **kwargs)
+            stem_path.parent.mkdir(parents=True, exist_ok=True)
+            save_audio(other_stem, str(stem_path), **kwargs)
