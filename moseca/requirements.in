@@ -1,6 +1,7 @@
 # Core dependencies
 fastapi==0.100.0
 uvicorn==0.22.0
+basic-pitch==0.4.0
 
 # Machine learning and audio processing
 demucs==4.0.0
@@ -32,4 +33,4 @@ pandas==1.5.3
 
 # Additional dependencies
 requests==2.31.0
-python-multipart==0.0.13
+python-multipart==0.0.12
