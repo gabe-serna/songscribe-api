@@ -35,11 +35,13 @@ To exit, press `ctrl + C` on Windows or `cmd + C` on Mac
 
 ### Endpoints
 
-**Endpoint**: `/split_audio`  
+
+
+#### `/split-audio`
 **Method**: `POST`  
 **Description**: Upload an audio file and specify the separation mode to separate the audio tracks.
 
-#### Request Parameters
+##### Request Parameters
 
 | Parameter        | Type         | Required | Description                                               |
 |------------------|--------------|----------|-----------------------------------------------------------|
@@ -67,7 +69,7 @@ curl -X POST "http://127.0.0.1:8000/split_audio" \
 
 <br/><br/>
 
-#### **2. Endpoint**: `/audio-to-midi`
+#### `/audio-to-midi`
 **Method**: `POST`  
 **Description**: Converts an audio file to a MIDI file by extracting musical notes and events from the audio.
 

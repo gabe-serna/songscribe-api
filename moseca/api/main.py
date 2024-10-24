@@ -1,6 +1,7 @@
 # main.py
 from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 import shutil
 from pathlib import Path
@@ -17,6 +18,15 @@ from basic_pitch.inference import predict_and_save
 from basic_pitch import ICASSP_2022_MODEL_PATH
 
 app = FastAPI()
+
+# Allow CORS from frontend dev environment (localhost:3000)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Mapping separation modes to models and output files
 separation_mode_to_model = {
@@ -35,7 +45,7 @@ separation_mode_to_model = {
     ),
 }
 
-@app.post("/split_audio")
+@app.post("/split-audio")
 async def split_audio(
     audio_file: UploadFile = File(...),
     separation_mode: str = Form(...),
