@@ -32,10 +32,9 @@ uvicorn moseca.api.main:app --reload
 
 To exit, press `ctrl + C` on Windows or `cmd + C` on Mac
 
+Visit `/docs` for a list of all available endpoints with details, along with tools for testing the endpoint.
 
 ### Endpoints
-
-
 
 #### `/split-audio`
 **Method**: `POST`  
