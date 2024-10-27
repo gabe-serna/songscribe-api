@@ -16,6 +16,11 @@ from moseca.api.service.vocal_remover.runner import load_model, separate
 # For /audio-to-midi
 from basic_pitch.inference import predict_and_save
 from basic_pitch import ICASSP_2022_MODEL_PATH
+from moseca.api.quantize_midi import quantize_midi
+# For Drum Transcription
+from adtof.model.model import Model
+import shutil
+import mido
 
 app = FastAPI()
 
@@ -150,6 +155,13 @@ async def split_audio(
         filename='output.zip'
     )
 
+def cleanup_files(file_paths: List[Path]):
+    for path in file_paths:
+        if path.is_file():
+            path.unlink()
+        elif path.is_dir():
+            shutil.rmtree(path)
+
 @app.post("/audio-to-midi")
 async def audio_to_midi(
     audio_file: UploadFile = File(...),
@@ -159,6 +171,7 @@ async def audio_to_midi(
     minimum_frequency: Optional[float] = Form(None),
     maximum_frequency: Optional[float] = Form(None),
     tempo: Optional[int] = Form(None),
+    percussion: Optional[bool] = Form(False),  # New percussion parameter
     background_tasks: BackgroundTasks = None,
 ):
     # Create temporary directories
@@ -180,50 +193,147 @@ async def audio_to_midi(
     minimum_note_length = minimum_note_length if minimum_note_length is not None else 127.70
     tempo = tempo if tempo is not None else 120
 
+    # Initialize list to keep track of files to clean up
+    files_to_cleanup = [input_file_path]
+
     try:
-        predict_and_save(
-            audio_path_list=[input_file_path],
-            output_directory=output_directory,
-            save_midi=True,
-            sonify_midi=False,
-            save_model_outputs=False,
-            save_notes=False,
-            model_or_model_path=ICASSP_2022_MODEL_PATH,
-            onset_threshold=onset_threshold,
-            frame_threshold=frame_threshold,
-            minimum_note_length=minimum_note_length,
-            minimum_frequency=minimum_frequency,
-            maximum_frequency=maximum_frequency,
-            midi_tempo=tempo,
-        )
-    except Exception:
+        if percussion:
+            # **Drum Transcription Process**
+
+            # Ensure input and output directories for drum transcription
+            drum_input_dir = Path("data/drum_input")
+            drum_output_dir = Path("data/drum_output")
+            drum_input_dir.mkdir(parents=True, exist_ok=True)
+            drum_output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy the audio file to the drum input directory
+            drum_input_file_path = drum_input_dir / audio_file.filename
+            shutil.copyfile(input_file_path, drum_input_file_path)
+
+            # Initialize the ADTOF model
+            modelName = "Frame_RNN"
+            model, hparams = Model.modelFactory(modelName=modelName, scenario="adtofAll", fold=0)
+            print("peakThreshold:", hparams["peakThreshold"])
+
+            # Perform transcription
+            model.predictFolder(str(drum_input_file_path), str(drum_output_dir), **hparams)
+
+            # Adjust note timings and tempo
+            midi_file_name = audio_file.filename + '.mid'
+            midi_file_path = drum_output_dir / midi_file_name
+
+            if midi_file_path.exists():
+                # Calculate scaling factor
+                original_tempo_bpm = 120  # The model assumes 120 BPM by default
+                scaling_factor = tempo / original_tempo_bpm
+
+                # Load the MIDI file
+                mid = mido.MidiFile(str(midi_file_path))
+
+                # Create a new MIDI file to store adjusted notes
+                new_mid = mido.MidiFile(ticks_per_beat=mid.ticks_per_beat)
+
+                for track in mid.tracks:
+                    new_track = mido.MidiTrack()
+                    new_mid.tracks.append(new_track)
+
+                    # Insert tempo meta message at the beginning of the track
+                    tempo_meta = mido.MetaMessage('set_tempo', tempo=mido.bpm2tempo(tempo), time=0)
+                    new_track.append(tempo_meta)
+
+                    for msg in track:
+                        # Adjust the time (delta time)
+                        adjusted_time = int(msg.time * scaling_factor)
+                        msg = msg.copy(time=adjusted_time)
+                        new_track.append(msg)
+
+                # Save the new MIDI file with adjusted note timings and tempo
+                adjusted_midi_file_name = f"adjusted_{midi_file_name}"
+                adjusted_midi_file_path = output_directory / adjusted_midi_file_name
+                new_mid.save(str(adjusted_midi_file_path))
+                print(f"Tempo adjusted to {tempo} BPM in the MIDI file, and note timings updated.")
+
+                # Schedule cleanup of temporary files
+                files_to_cleanup.extend([
+                    drum_input_file_path,
+                    midi_file_path,
+                    *drum_output_dir.glob('*'),  # Clean all files in drum_output_dir
+                ])
+
+                # Return the adjusted MIDI file as a response
+                if background_tasks is not None:
+                    background_tasks.add_task(cleanup_files, files_to_cleanup)
+
+                if adjusted_midi_file_path.exists():
+                    return FileResponse(
+                        path=str(adjusted_midi_file_path),
+                        media_type='audio/midi',
+                        filename=adjusted_midi_file_name
+                    )
+                else:
+                    return JSONResponse(content={"error": "Adjusted MIDI file was not generated"}, status_code=500)
+            else:
+                return JSONResponse(content={"error": "MIDI file was not generated by drum transcription"}, status_code=500)
+
+        else:
+            # **Default Audio-to-MIDI Process**
+
+            predict_and_save(
+                audio_path_list=[input_file_path],
+                output_directory=output_directory,
+                save_midi=True,
+                sonify_midi=False,
+                save_model_outputs=False,
+                save_notes=False,
+                model_or_model_path=ICASSP_2022_MODEL_PATH,
+                onset_threshold=onset_threshold,
+                frame_threshold=frame_threshold,
+                minimum_note_length=minimum_note_length,
+                minimum_frequency=minimum_frequency,
+                maximum_frequency=maximum_frequency,
+                midi_tempo=tempo,
+            )
+
+            # Construct the MIDI file path
+            midi_file_name = input_file_path.stem + "_basic_pitch.mid"
+            midi_file_path = output_directory / midi_file_name
+
+            # Check if the MIDI file was generated
+            if not midi_file_path.exists():
+                return JSONResponse(content={"error": "MIDI file was not generated"}, status_code=500)
+
+            # Quantize the MIDI file
+            quantize_midi(str(midi_file_path), tempo)
+
+            # After quantization, use the quantized MIDI file for output
+            quantized_midi_file_name = f'quantized_{midi_file_name}'
+            quantized_midi_file_path = output_directory / quantized_midi_file_name
+
+            # Schedule cleanup of temporary files
+            files_to_cleanup.extend([
+                midi_file_path,
+                quantized_midi_file_path,
+                *output_directory.glob('*'),  # Clean all files in output_directory
+            ])
+
+            if background_tasks is not None:
+                background_tasks.add_task(cleanup_files, files_to_cleanup)
+
+            if quantized_midi_file_path.exists():
+                # Return the quantized MIDI file as a response
+                return FileResponse(
+                    path=str(quantized_midi_file_path),
+                    media_type='audio/midi',
+                    filename=quantized_midi_file_name
+                )
+            else:
+                return JSONResponse(content={"error": "Quantized MIDI file was not generated"}, status_code=500)
+
+    except Exception as e:
+        # Cleanup files in case of an error
+        if background_tasks is not None:
+            background_tasks.add_task(cleanup_files, files_to_cleanup)
+        else:
+            cleanup_files(files_to_cleanup)
+        print(f"Error: {e}")
         return JSONResponse(content={"error": "MIDI conversion failed"}, status_code=500)
-
-    # Construct the MIDI file path
-    midi_file_name = input_file_path.stem + "_basic_pitch.mid"
-    midi_file_path = output_directory / midi_file_name
-
-    # Schedule cleanup of temporary files after response is sent
-    if background_tasks is not None:
-        background_tasks.add_task(
-            cleanup_files,
-            [input_file_path, output_directory]
-        )
-
-    if midi_file_path.exists():
-        # Return the MIDI file as a response
-        return FileResponse(
-            midi_file_path,
-            media_type='audio/midi',
-            filename=midi_file_name
-        )
-    else:
-        return JSONResponse(content={"error": "MIDI file was not generated"}, status_code=500)
-
-
-def cleanup_files(file_paths: List[Path]):
-    for path in file_paths:
-        if path.is_file():
-            path.unlink()
-        elif path.is_dir():
-            shutil.rmtree(path)
