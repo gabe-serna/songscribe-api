@@ -1,14 +1,10 @@
+from pathlib import Path
 import mido
 import os
 import sys
 from mido import MidiFile, MidiTrack, Message, MetaMessage
 
-def quantize_midi(input_file: str, bpm: int):
-    # Create output directory if it doesn't exist
-    output_dir = 'data/midi'
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
+def quantize_midi(input_file: str, bpm: int, output_dir: Path):
     # Get the file name without directory
     file_name = os.path.basename(input_file)
     output_file = os.path.join(output_dir, f'quantized_{file_name}')
