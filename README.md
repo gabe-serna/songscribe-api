@@ -42,16 +42,16 @@ Visit `/docs` for a list of all available endpoints with details, along with too
 
 ##### Request Parameters
 
-| Parameter        | Type         | Required | Description                                               |
-|------------------|--------------|----------|-----------------------------------------------------------|
-| `audio_file`     | `file`       | Yes      | The audio file to be processed (e.g., MP3, WAV).        |
-| `separation_mode`| `string`     | Yes      | The model to use for separation. Possible values:        |
-|                  |              |          | - `Vocals & Instrumental (Low Quality, Faster)`         |
-|                  |              |          | - `Vocals & Instrumental (High Quality, Slower)`        |
-|                  |              |          | - `Vocals, Drums, Bass & Other (Slower)`                |
-|                  |              |          | - `Vocal, Drums, Bass, Guitar, Piano & Other (Slowest)` |
-| `start_time`     | `int`        | No       | The starting point of audio processing in seconds (default is 0). |
-| `end_time`       | `int`        | No       | The endpoint of audio processing in seconds (default is the total duration of the audio). |
+| Parameter         | Type     | Required | Description                                                                               |
+|-------------------|----------|----------|-------------------------------------------------------------------------------------------|
+| `audio_file`      | `file`   | Yes      | The audio file to be processed (e.g., MP3, WAV).                                          |
+| `separation_mode` | `string` | Yes      | The model to use for separation. Possible values:                                         |
+|                   |          |          | - `Vocals & Instrumental (Low Quality, Faster)`                                           |
+|                   |          |          | - `Vocals & Instrumental (High Quality, Slower)`                                          |
+|                   |          |          | - `Vocals, Drums, Bass & Other (Slower)`                                                  |
+|                   |          |          | - `Vocal, Drums, Bass, Guitar, Piano & Other (Slowest)`                                   |
+| `start_time`      | `int`    | No       | The starting point of audio processing in seconds (default is `0`).                       |
+| `end_time`        | `int`    | No       | The endpoint of audio processing in seconds (default is the total duration of the audio). |
 
 #### Request Example
 
@@ -74,16 +74,16 @@ curl -X POST "http://127.0.0.1:8000/split_audio" \
 
 ##### Request Parameters
 
-| Parameter             | Type      | Required | Description                                                                              |
-|-----------------------|-----------|----------|------------------------------------------------------------------------------------------|
-| `audio_file`          | `file`    | Yes      | The audio file to be converted (e.g., MP3, WAV).                                         |
-| `onset_threshold`     | `float`   | No       | The threshold for detecting the onset of notes (default: model's default value).         |
-| `frame_threshold`     | `float`   | No       | The threshold for detecting individual frames (default: model's default value).          |
-| `minimum_note_length` | `float`   | No       | The minimum duration (in seconds) for detected notes (default: model's default value).   |
-| `minimum_frequency`   | `float`   | No       | The minimum frequency for note detection (in Hz, default: model's default value).        |
-| `maximum_frequency`   | `float`   | No       | The maximum frequency for note detection (in Hz, default: model's default value).        |
-| `tempo`               | `int`     | No       | The tempo to be applied in the MIDI output (in BPM, default: model's estimated tempo).   |
-| `percussion`          | `boolean` | No       | Determines if the audio should be converted as a percussive instrument (default: false). |
+| Parameter             | Type      | Required | Description                                                                                |
+|-----------------------|-----------|----------|--------------------------------------------------------------------------------------------|
+| `audio_file`          | `file`    | Yes      | The audio file to be converted (e.g., MP3, WAV).                                           |
+| `onset_threshold`     | `float`   | No       | The threshold for detecting the onset of notes (default: `0.5`).                           |
+| `frame_threshold`     | `float`   | No       | The threshold for detecting individual frames (default: `0.3`).                            |
+| `minimum_note_length` | `float`   | No       | The minimum duration (in seconds) for detected notes (default: `127.70`).                  |
+| `minimum_frequency`   | `float`   | No       | The minimum frequency for note detection.                                                  |
+| `maximum_frequency`   | `float`   | No       | The maximum frequency for note detection.                                                  |
+| `tempo`               | `int`     | No       | The tempo to be applied in the MIDI output (in BPM, default: `120`).                       |
+| `percussion`          | `boolean` | No       | Determines if the audio should be converted as a percussive instrument (default: `false`). |
 
 ##### Request Example
 
