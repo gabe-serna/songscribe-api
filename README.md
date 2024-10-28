@@ -74,15 +74,16 @@ curl -X POST "http://127.0.0.1:8000/split_audio" \
 
 ##### Request Parameters
 
-| Parameter               | Type     | Required | Description                                                                                 |
-|-------------------------|----------|----------|---------------------------------------------------------------------------------------------|
-| `audio_file`            | `file`   | Yes      | The audio file to be converted (e.g., MP3, WAV).                                            |
-| `onset_threshold`       | `float`  | No       | The threshold for detecting the onset of notes (default: model's default value).             |
-| `frame_threshold`       | `float`  | No       | The threshold for detecting individual frames (default: model's default value).              |
-| `minimum_note_length`   | `float`  | No       | The minimum duration (in seconds) for detected notes (default: model's default value).       |
-| `minimum_frequency`     | `float`  | No       | The minimum frequency for note detection (in Hz, default: model's default value).            |
-| `maximum_frequency`     | `float`  | No       | The maximum frequency for note detection (in Hz, default: model's default value).            |
-| `tempo`                 | `int`    | No       | The tempo to be applied in the MIDI output (in BPM, default: model's estimated tempo).       |
+| Parameter             | Type      | Required | Description                                                                              |
+|-----------------------|-----------|----------|------------------------------------------------------------------------------------------|
+| `audio_file`          | `file`    | Yes      | The audio file to be converted (e.g., MP3, WAV).                                         |
+| `onset_threshold`     | `float`   | No       | The threshold for detecting the onset of notes (default: model's default value).         |
+| `frame_threshold`     | `float`   | No       | The threshold for detecting individual frames (default: model's default value).          |
+| `minimum_note_length` | `float`   | No       | The minimum duration (in seconds) for detected notes (default: model's default value).   |
+| `minimum_frequency`   | `float`   | No       | The minimum frequency for note detection (in Hz, default: model's default value).        |
+| `maximum_frequency`   | `float`   | No       | The maximum frequency for note detection (in Hz, default: model's default value).        |
+| `tempo`               | `int`     | No       | The tempo to be applied in the MIDI output (in BPM, default: model's estimated tempo).   |
+| `percussion`          | `boolean` | No       | Determines if the audio should be converted as a percussive instrument (default: false). |
 
 ##### Request Example
 
@@ -95,6 +96,7 @@ curl -X POST "http://127.0.0.1:8000/audio-to-midi" \
   -F "minimum_frequency=200" \
   -F "maximum_frequency=8000" \
   -F "tempo=120" \
+  -F "percussion=false"
   --output output.mid
 ```
 

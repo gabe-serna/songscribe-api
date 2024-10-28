@@ -4,7 +4,7 @@ import os
 import sys
 from mido import MidiFile, MidiTrack, Message, MetaMessage
 
-def quantize_midi(input_file: str, bpm: int, output_dir: Path):
+def quantize_midi(input_file: str, bpm: int, output_dir: str):
     # Get the file name without directory
     file_name = os.path.basename(input_file)
     output_file = os.path.join(output_dir, f'quantized_{file_name}')
