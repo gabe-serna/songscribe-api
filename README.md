@@ -50,8 +50,10 @@ Visit `/docs` for a list of all available endpoints with details, along with too
 |                   |          |          | - `Vocals & Instrumental (High Quality, Slower)`                                          |
 |                   |          |          | - `Vocals, Drums, Bass & Other (Slower)`                                                  |
 |                   |          |          | - `Vocal, Drums, Bass, Guitar, Piano & Other (Slowest)`                                   |
+| `tempo`           | `int`    | Yes      | The tempo in beats per minute of the song                                                 | 
 | `start_time`      | `int`    | No       | The starting point of audio processing in seconds (default is `0`).                       |
 | `end_time`        | `int`    | No       | The endpoint of audio processing in seconds (default is the total duration of the audio). |
+
 
 #### Request Example
 

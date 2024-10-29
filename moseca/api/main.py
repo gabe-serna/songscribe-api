@@ -3,15 +3,14 @@ from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
-import shutil
 from pathlib import Path
-from pydub import AudioSegment
 from zipfile import ZipFile
 from typing import Optional
 
 # For /split-audio
 from moseca.api.service.demucs_runner import separator
 from moseca.api.service.vocal_remover.runner import load_model, separate
+from moseca.api.align_audio import align_audio
 
 # For /audio-to-midi
 from basic_pitch.inference import predict_and_save
@@ -20,7 +19,7 @@ from moseca.api.quantize_midi import quantize_midi
 
 # For Drum Transcription
 from moseca.api.tempo_chunking import tempo_chunking
-from moseca.api.service.prettyify import prettyify
+from moseca.api.prettyify import prettyify
 from adtof.model.model import Model
 import shutil
 import mido
@@ -57,6 +56,7 @@ separation_mode_to_model = {
 async def split_audio(
     audio_file: UploadFile = File(...),
     separation_mode: str = Form(...),
+    tempo: int = Form(...),
     start_time: int = Form(0),
     end_time: int = Form(None),
     background_tasks: BackgroundTasks = None,
@@ -76,18 +76,9 @@ async def split_audio(
 
     model_name, file_sources = separation_mode_to_model[separation_mode]
 
-    # Load and process the audio file
-    file_extension = input_file_path.suffix[1:]  # e.g., 'mp3'
-    song = AudioSegment.from_file(input_file_path, format=file_extension)
-
-    n_secs = len(song) // 1000  # duration in seconds
-    if end_time is None or end_time > n_secs:
-        end_time = n_secs
-
-    # Trim the audio if start_time and end_time are specified
-    song = song[start_time * 1000 : end_time * 1000]
+    # Align audio to the first measure and trim
+    align_audio(str(input_file_path), tempo, str(temp_dir), start_time, end_time)
     processed_input_path = temp_dir / f"processed_{audio_file.filename}"
-    song.export(processed_input_path, format=file_extension)
 
     # Output directory for separated tracks
     output_dir = temp_dir / "output"
