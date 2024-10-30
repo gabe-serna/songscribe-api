@@ -142,11 +142,6 @@ def align_audio(audio_file: str, tempo: int, output_dir: str, start_time: float 
         y_aligned = y[sample_to_trim:]
         trimmed_time = trim_time
 
-    # Ensure trim_time does not exceed one measure duration
-    if trimmed_time > measure_duration:
-        trimmed_time = measure_duration
-        print("WARNING: Maximum Value Was Trimmed. Audio alignment might not be accurate! ⚠️")
-
     # Save the aligned audio file
     output_file = os.path.join(output_dir, f"processed_{os.path.basename(audio_file)}")
     try:

@@ -46,27 +46,75 @@ Visit `/docs` for a list of all available endpoints with details, along with too
 |-------------------|----------|----------|-------------------------------------------------------------------------------------------|
 | `audio_file`      | `file`   | Yes      | The audio file to be processed (e.g., MP3, WAV).                                          |
 | `separation_mode` | `string` | Yes      | The model to use for separation. Possible values:                                         |
-|                   |          |          | - `Vocals & Instrumental (Low Quality, Faster)`                                           |
-|                   |          |          | - `Vocals & Instrumental (High Quality, Slower)`                                          |
-|                   |          |          | - `Vocals, Drums, Bass & Other (Slower)`                                                  |
-|                   |          |          | - `Vocal, Drums, Bass, Guitar, Piano & Other (Slowest)`                                   |
-| `tempo`           | `int`    | Yes      | The tempo in beats per minute of the song                                                 | 
+|                   |          |          | - `Duet`                                                                                  |
+|                   |          |          | - `Small Band`                                                                            |
+|                   |          |          | - `Full Band`                                                                             |
+| `tempo`           | `int`    | Yes      | The tempo in beats per minute of the song.                                                | 
 | `start_time`      | `int`    | No       | The starting point of audio processing in seconds (default is `0`).                       |
 | `end_time`        | `int`    | No       | The endpoint of audio processing in seconds (default is the total duration of the audio). |
 
+##### Separation Modes Explained
 
-#### Request Example
+- **Duet**:
+  - **Description**: Separates the track into vocals and instrumental components.
+  - **Files Generated**: `vocals.mp3`, `no_vocals.mp3`
+
+- **Small Band**:
+  - **Description**: Separates the track into vocals, drums, bass, and other instruments.
+  - **Files Generated**: `vocals.mp3`, `drums.mp3`, `bass.mp3`, `other.mp3`
+
+- **Full Band**:
+  - **Description**: Separates the track into vocals, drums, bass, guitar, piano, and other instruments.
+  - **Files Generated**: `vocals.mp3`, `drums.mp3`, `bass.mp3`, `guitar.mp3`, `piano.mp3`, `other.mp3`
+
+##### Request Example
 
 To send a request using **cURL**, you can use the following command:
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/split_audio" \
+curl -X POST "http://127.0.0.1:8000/split-audio" \
   -F "audio_file=@/path/to/your/audiofile.mp3" \
-  -F "separation_mode=Vocals & Instrumental (High Quality, Slower)" \
+  -F "separation_mode=Duet" \
+  -F "tempo=120" \
   -F "start_time=0" \
   -F "end_time=60" \
   --output output.zip
 ```
+
+<br/><br/>
+
+
+#### `/split-yt-audio`
+**Method**: `POST`  
+**Description**: Provide a YouTube URL to download its audio and specify the separation mode to separate the audio tracks.
+> This endpoint is identical to `/split-audio`, except this endpoint you provide a YouTube URL instead of an audio file.
+
+##### Request Parameters
+
+| Parameter         | Type     | Required | Description                                                                               |
+|-------------------|----------|----------|-------------------------------------------------------------------------------------------|
+| `youtube_url`     | `string` | Yes      | The YouTube video URL from which to download the audio.                                   |
+| `separation_mode` | `string` | Yes      | The model to use for separation. Possible values:                                         |
+|                   |          |          | - `Duet`                                                                                   |
+|                   |          |          | - `Small Band`                                                                             |
+|                   |          |          | - `Full Band`                                                                              |
+| `tempo`           | `int`    | Yes      | The tempo in beats per minute of the song.                                                 | 
+| `start_time`      | `int`    | No       | The starting point of audio processing in seconds (default is `0`).                       |
+| `end_time`        | `int`    | No       | The endpoint of audio processing in seconds (default is the total duration of the audio). |
+
+##### Request Example
+
+To send a request using **cURL**, you can use the following command:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/split-yt-audio" \
+  -F "youtube_url=https://www.youtube.com/watch?v=example" \
+  -F "separation_mode=Small Band" \
+  -F "tempo=120" \
+  -F "start_time=0" \
+  -F "end_time=60" \
+  --output output.zip
+ ```
 
 <br/><br/>
 
@@ -104,25 +152,126 @@ curl -X POST "http://127.0.0.1:8000/audio-to-midi" \
 
 ------
 
-## Local environment
-> Note: Using Python 3.12 WILL NOT work! 
+## Local Environment
 
-Create a new environment with Python 3.10 and install the requirements:
+> *Note: Using Python 3.12 **will not** work! Please use Python 3.11.*
+
+### Prerequisites
+
+- **Python 3.11** installed on your system. You can download it from the [official Python website](https://www.python.org/downloads/).
+- **Git** installed on your system. You can download it from the [official Git website](https://git-scm.com/downloads).
+
+### 1. Clone the Repository
+
+First, clone the Songscribe API repository to your local machine:
+
+```bash
+git clone https://github.com/gabe-serna/songscribe-api.git
+cd songscribe-api
+```
+
+### 2. Create a Virtual Environment
+
+Creating a virtual environment ensures that dependencies are managed separately from your global Python installation.
+
+#### **Windows:**
+
+1. Open **PowerShell**.
+
+2. Create a virtual environment named `venv`:
+
+    ```powershell
+    python -m venv venv
+    ```
+
+3. Activate the virtual environment:
+
+    ```powershell
+    .\venv\Scripts\Activate
+    ```
+
+#### **macOS/Linux:**
+
+1. Open your **Terminal**.
+
+2. Create a virtual environment named `venv`:
+
+    ```bash
+    python3 -m venv venv
+    ```
+
+3. Activate the virtual environment:
+
+    ```bash
+    source venv/bin/activate
+    ```
+
+### 3. Set Python to Use UTF-8 Encoding
+
+#### **Windows:**
+
+1. Set Python to use UTF-8 encoding:
+
+    ```powershell
+    $env:PYTHONUTF8=1
+    ```
+
+2. Verify that UTF-8 encoding is enabled:
+
+    ```powershell
+    echo $env:PYTHONUTF8
+    ```
+
+    - The output should be `1`.
+
+#### **macOS/Linux:**
+
+1. Set Python to use UTF-8 encoding:
+
+    ```bash
+    export PYTHONUTF8=1
+    ```
+
+2. Verify that UTF-8 encoding is enabled:
+
+    ```bash
+    echo $PYTHONUTF8
+    ```
+
+    - The output should be `1`.
+
+### 4. Upgrade `pip` and Install `wheel`
+
+Before installing the project dependencies, ensure that `pip` is up-to-date and install `wheel`:
+
+```bash
+pip install --upgrade pip
+pip install wheel
+```
+
+### 5. Install Project Dependencies
+
+With the virtual environment activated and `pip` updated, install the required packages:
+
 ```bash
 pip install -r requirements.txt
 ```
-set the `PYTHONPATH` to the root folder:
+
+### 6. Run the API Server
+
+Start the FastAPI server using Uvicorn:
+
 ```bash
-export PYTHONPATH=path/to/moseca
+uvicorn moseca.api.main:app --reload
 ```
-download the vocal remover model:
-```bash
-wget --progress=bar:force:noscroll https://huggingface.co/fabiogra/baseline_vocal_remover/resolve/main/baseline.pth
-```
-then run the app with:
-```bash
-streamlit run api/header.py
-```
+
+- The `--reload` flag enables auto-reloading of the server upon code changes.
+
+### 8. Access the API Documentation
+
+Once the server is running, navigate to [`http://127.0.0.1:8000/docs`](http://127.0.0.1:8000/docs) in your web browser to access the interactive API documentation provided by Swagger UI.
+
+> *Note: Within the docs, you can test the endpoints very quickly which is great for testing.*
 
 ## FAQs
 
