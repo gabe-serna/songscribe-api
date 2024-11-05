@@ -44,7 +44,7 @@ Visit `/docs` for a list of all available endpoints with details, along with too
 
 | Parameter         | Type     | Required | Description                                                                               |
 |-------------------|----------|----------|-------------------------------------------------------------------------------------------|
-| `audio_file`      | `file`   | Yes      | The audio file to be processed (e.g., MP3, WAV).                                          |
+| `audio_file`      | `file`   | Yes      | The audio file to be processed (.mp3, .wav, .ogg, .flac).                                 |
 | `separation_mode` | `string` | Yes      | The model to use for separation. Possible values:                                         |
 |                   |          |          | - `Duet`                                                                                  |
 |                   |          |          | - `Small Band`                                                                            |
@@ -93,7 +93,7 @@ curl -X POST "http://127.0.0.1:8000/split-audio" \
 
 | Parameter         | Type     | Required | Description                                                                               |
 |-------------------|----------|----------|-------------------------------------------------------------------------------------------|
-| `youtube_url`     | `string` | Yes      | The YouTube video URL from which to download the audio.                                   |
+| `audio_file`      | `file`   | Yes      | The audio file to be processed (.mp3, .wav, .ogg, .flac).                                 |
 | `separation_mode` | `string` | Yes      | The model to use for separation. Possible values:                                         |
 |                   |          |          | - `Duet`                                                                                   |
 |                   |          |          | - `Small Band`                                                                             |
@@ -114,6 +114,34 @@ curl -X POST "http://127.0.0.1:8000/split-yt-audio" \
   -F "start_time=0" \
   -F "end_time=60" \
   --output output.zip
+ ```
+
+<br/><br/>
+
+#### `/align-audio`
+**Method**: `POST`  
+**Description**: Remove silence from the beginning of a song, and align the start with the first measure.
+
+##### Request Parameters
+
+| Parameter         | Type     | Required | Description                                                                              |
+|-------------------|----------|----------|------------------------------------------------------------------------------------------|
+| `audio file`      | `string` | Yes      | The YouTube video URL from which to download the audio.                                  |
+| `tempo`           | `int`    | Yes      | The tempo in beats per minute of the song.                                               | 
+| `start_time`      | `int`    | No       | The starting point of audio alignment in seconds (default is `0`).                       |
+| `end_time`        | `int`    | No       | The endpoint of audio alignment in seconds (default is the total duration of the audio). |
+
+##### Request Example
+
+To send a request using **cURL**, you can use the following command:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/align-audio" \
+  -F "audio_file=@/path/to/your/audiofile.mp3" \
+  -F "tempo=120" \
+  -F "start_time=0" \
+  -F "end_time=60" \
+  --output processed_audiofile.mp3
  ```
 
 <br/><br/>
@@ -147,7 +175,7 @@ curl -X POST "http://127.0.0.1:8000/audio-to-midi" \
   -F "maximum_frequency=8000" \
   -F "tempo=120" \
   -F "percussion=false"
-  --output output.mid
+  --output audiofile.mid
 ```
 
 ------

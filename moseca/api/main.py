@@ -6,16 +6,23 @@ from typing import List, Optional
 from pathlib import Path
 from zipfile import ZipFile
 from enum import Enum
+from mido import MidiFile, MetaMessage
 import shutil
 
 # For /split-audio and /split-yt-audio
 from moseca.api.service.demucs_runner import separator
 from moseca.api.align_audio import align_audio
 
+# For /align-audio
+import mimetypes
+
 # For /audio-to-midi
 from basic_pitch.inference import predict_and_save
 from basic_pitch import ICASSP_2022_MODEL_PATH
 from moseca.api.quantize_midi import quantize_midi
+from moseca.api.get_key_signature import detect_key
+import os
+import tempfile
 
 # For Drum Transcription
 from moseca.api.tempo_chunking import tempo_chunking
@@ -25,6 +32,9 @@ import mido
 
 # Import YouTube audio downloader
 from moseca.api.service.youtube import download_audio_from_youtube
+
+# For /combine-midi
+from moseca.api.combine_midi import combine_midi
 
 app = FastAPI()
 
@@ -129,7 +139,7 @@ async def process_audio_file(
 
     model_name, file_sources = separation_mode_to_model[separation_mode.value]
 
-    # Align audio to the first measure and trim
+    # Align audio and trim
     align_audio(str(input_file_path), tempo, str(temp_dir), start_time, end_time)
     processed_input_path = temp_dir / f"processed_{input_file_path.name}"
 
@@ -183,7 +193,7 @@ async def process_audio_file(
     if background_tasks is not None:
         background_tasks.add_task(
             cleanup_files,
-            [input_file_path, processed_input_path, output_dir, zip_filename],
+            [*temp_dir.glob("*")]
         )
 
     # Return the ZIP file containing separated tracks
@@ -191,12 +201,47 @@ async def process_audio_file(
         zip_filename, media_type="application/zip", filename="output.zip"
     )
 
-def cleanup_files(file_paths: List[Path]):
-    for path in file_paths:
-        if path.is_file():
-            path.unlink()
-        elif path.is_dir():
-            shutil.rmtree(path)
+@app.post("/align-audio")
+async def align_audio_endpoint(
+    audio_file: UploadFile = File(...),
+    tempo: int = Form(...),
+    start_time: int = Form(0),
+    end_time: Optional[int] = Form(None),
+    background_tasks: BackgroundTasks = None,
+):
+    # Create temporary directories
+    temp_dir = Path("data/temp")
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    input_file_path = temp_dir / audio_file.filename
+
+    # Save the uploaded file
+    with open(input_file_path, "wb") as f:
+        shutil.copyfileobj(audio_file.file, f)
+
+    # Align audio and trim
+    align_audio(str(input_file_path), tempo, str(temp_dir), start_time, end_time)
+    processed_file_name = f"processed_{input_file_path.name}"
+    processed_input_path = temp_dir / processed_file_name
+
+    # Determine the correct MIME type
+    mime_type, _ = mimetypes.guess_type(processed_input_path.name)
+    if mime_type is None:
+        mime_type = "application/octet-stream"
+
+    # Schedule cleanup of temporary files after response is sent
+    if background_tasks is not None:
+        background_tasks.add_task(
+            cleanup_files,
+            [input_file_path, processed_input_path],
+        )
+
+    # Return the aligned audio
+    if processed_input_path.exists():
+        return FileResponse(
+            path=str(processed_input_path),
+            media_type=mime_type,
+            filename=processed_file_name,
+        )
 
 @app.post("/audio-to-midi")
 async def audio_to_midi(
@@ -213,7 +258,8 @@ async def audio_to_midi(
     # Create temporary directories
     temp_dir = Path("data/temp")
     temp_dir.mkdir(parents=True, exist_ok=True)
-    input_file_path = temp_dir / audio_file.filename
+    base_stem = audio_file.filename.split(".")[0]
+    input_file_path = temp_dir / f"base_{audio_file.filename}"
 
     # Save the uploaded file
     with open(input_file_path, "wb") as f:
@@ -229,9 +275,6 @@ async def audio_to_midi(
     minimum_note_length = minimum_note_length if minimum_note_length is not None else 127.70
     tempo = tempo if tempo is not None else 120
 
-    # Initialize list to keep track of files to clean up
-    files_to_cleanup = [input_file_path]
-
     try:
         if percussion:
             # **Drum Transcription Process**
@@ -241,7 +284,7 @@ async def audio_to_midi(
 
             # Perform transcription
             model.predictFolder(str(input_file_path), str(output_directory), **hparams)
-            midi_file_name = audio_file.filename + ".mid"
+            midi_file_name = "base_" + audio_file.filename + ".mid"
             midi_file_path = output_directory / midi_file_name
 
             # Remap Tempo (default output is 120bpm)
@@ -285,30 +328,27 @@ async def audio_to_midi(
 
             # Prettyify the MIDI file
             prettyify(str(adjusted_midi_file_path), str(output_directory))
-            final_midi_file_name = f"prettyified_{adjusted_midi_file_name}"
-            final_midi_file_path = output_directory / final_midi_file_name
+            pretty_midi_file_name = f"prettyified_{adjusted_midi_file_name}"
+            pretty_midi_file_path = output_directory / pretty_midi_file_name
 
-            # Schedule cleanup of temporary files
-            files_to_cleanup.extend(
-                [
-                    *temp_dir.glob("*"),
-                    *output_directory.glob("*"),  # Clean all files in drum_output_dir
-                ]
-            )
+            # Rename Output File
+            final_name = base_stem + ".mid"
+            final_path = output_directory / final_name
+            pretty_midi_file_path.rename(final_path)
 
             # Return the adjusted MIDI file as a response
             if background_tasks is not None:
-                background_tasks.add_task(cleanup_files, files_to_cleanup)
+                background_tasks.add_task(cleanup_files, [*temp_dir.glob("*"), *output_directory.glob("*")])
 
-            if final_midi_file_path.exists():
+            if final_path.exists():
                 return FileResponse(
-                    path=str(final_midi_file_path),
+                    path=str(final_path),
                     media_type="audio/midi",
-                    filename=final_midi_file_name,
+                    filename=final_name,
                 )
             else:
                 return JSONResponse(
-                    content={"error": "Quantized MIDI file was not generated"}, status_code=500
+                    content={"error": "Final MIDI file was not generated"}, status_code=500
                 )
         else:
             # **Default Audio-to-MIDI Process**
@@ -342,34 +382,122 @@ async def audio_to_midi(
             quantized_midi_file_name = f"quantized_{midi_file_name}"
             quantized_midi_file_path = output_directory / quantized_midi_file_name
 
-            # Schedule cleanup of temporary files
-            files_to_cleanup.extend(
-                [
-                    *temp_dir.glob("*"),
-                    *output_directory.glob("*"),  # Clean all files in output_directory
-                ]
-            )
+            # Rename Output File
+            final_name = base_stem + ".mid"
+            final_path = output_directory / final_name
+            quantized_midi_file_path.rename(final_path)
+
+            # Get the key signature and sppend it to the MIDI File
+            key_info = detect_key(str(input_file_path))
+            key = key_info['key']
+            mode = key_info['mode']
+
+            if mode == "Major":
+                midi_key = key
+            else:
+                midi_key = f"{key}m"
+            append_key_signature(str(final_path), midi_key)
 
             if background_tasks is not None:
-                background_tasks.add_task(cleanup_files, files_to_cleanup)
+                background_tasks.add_task(cleanup_files, [*temp_dir.glob("*"), *output_directory.glob("*")])
 
-            if quantized_midi_file_path.exists():
+            if final_path.exists():
                 # Return the quantized MIDI file as a response
                 return FileResponse(
-                    path=str(quantized_midi_file_path),
+                    path=str(final_path),
                     media_type="audio/midi",
-                    filename=quantized_midi_file_name,
+                    filename=final_name,
                 )
             else:
                 return JSONResponse(
-                    content={"error": "Quantized MIDI file was not generated"}, status_code=500
+                    content={"error": "Final MIDI file was not generated"}, status_code=500
                 )
 
     except Exception as e:
         # Cleanup files in case of an error
         if background_tasks is not None:
-            background_tasks.add_task(cleanup_files, files_to_cleanup)
+            background_tasks.add_task(cleanup_files, [*temp_dir.glob("*"), *output_directory.glob("*")])
         else:
-            cleanup_files(files_to_cleanup)
+            cleanup_files([*temp_dir.glob("*"), *output_directory.glob("*")])
         print(f"Error: {e}")
         return JSONResponse(content={"error": "MIDI conversion failed"}, status_code=500)
+
+class Mode(str, Enum):
+    minor = "Minor"
+    major = "Major"
+
+@app.post("/combine-midi")
+async def combine_midi_endpoint(
+    midi_files: List[UploadFile] = File(...),
+    background_tasks: BackgroundTasks = None,
+):
+    # Create temporary directory
+    temp_dir = Path("data/temp")
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    midi_file_paths = []
+    for midi_file in midi_files:
+        input_file_path = temp_dir / midi_file.filename
+        with open(input_file_path, "wb") as f:
+            shutil.copyfileobj(midi_file.file, f)
+        midi_file_paths.append(str(input_file_path))
+
+    # Run combine_midi function
+    output_file_path = combine_midi(midi_file_paths, "Pixel Summer")
+
+    # Schedule cleanup of temporary files after response is sent
+    if background_tasks is not None:
+        background_tasks.add_task(
+            cleanup_files,[*temp_dir.glob("*")]
+        )
+
+    # Return the combined MIDI file
+    if os.path.exists(output_file_path):
+        return FileResponse(
+            path=output_file_path,
+            media_type="audio/midi",
+            filename="combined.mid",
+        )
+    else:
+        return {"error": "Combined MIDI file not found."}
+
+def cleanup_files(file_paths: List[Path]):
+    for path in file_paths:
+        if path.is_file():
+            path.unlink()
+        elif path.is_dir():
+            shutil.rmtree(path)
+
+def append_key_signature(midi_path: str, midi_key: str):
+    mid = MidiFile(midi_path)
+    key_meta = MetaMessage('key_signature', key=midi_key, time=0)
+    text_meta = MetaMessage('text', text=f"Key: {midi_key}", time=0)
+
+    # Insert the key signature at the beginning of the first track
+    if len(mid.tracks) != 0:
+        print(f"Appending key signature of {midi_key} to file")
+        mid.tracks[0].insert(0, key_meta)
+        mid.tracks[0].insert(1, text_meta)
+    else:
+        print("Error: Midi File has no Tracks!")
+        return
+
+    # Save the modified MIDI to a temporary file
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mid') as tmp_file:
+            temp_path = tmp_file.name
+        mid.save(temp_path)
+
+    except IOError as e:
+        print(f"Error: Unable to save to temporary file. {e}")
+        return
+
+    # Replace the original MIDI file with the temporary file
+    try:
+        os.replace(temp_path, midi_path)
+        print(f"Successfully added key signature '{midi_key}' to '{midi_path}'.")
+    except OSError as e:
+        print(f"Error: Unable to overwrite the original MIDI file. {e}")
+        # Clean up the temporary file in case of failure
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
