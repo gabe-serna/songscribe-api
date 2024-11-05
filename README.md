@@ -296,7 +296,7 @@ Once the server is running, navigate to [`http://127.0.0.1:8000/docs`](http://12
 
 ## Docker
 
-You access the docker image for this API [here](https://hub.docker.com/repository/docker/gabeserna/songscribe-api/general).
+You access the docker image for this API [here](https://hub.docker.com/r/gabeserna/songscribe-api).
 
 ## FAQs
 
