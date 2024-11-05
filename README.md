@@ -3,22 +3,15 @@
 </p>
 
 ---
-
 - [How to Use Songscribe API](#how-to-use-songscribe-api)
   - [Start the Server](#start-the-server)
   - [Endpoints](#endpoints)
-  
-
 - [Local environment](#local-environment)
-
-
+- [Docker](#docker)
 - [FAQs](#faqs)
   - [How does it work?](#how-does-it-work)
   - [How does Moseca work?](#how-does-moseca-work)
-  
-
 - [Disclaimer](#disclaimer)
-
 ---
 
 
@@ -300,6 +293,10 @@ uvicorn moseca.api.main:app --reload
 Once the server is running, navigate to [`http://127.0.0.1:8000/docs`](http://127.0.0.1:8000/docs) in your web browser to access the interactive API documentation provided by Swagger UI.
 
 > *Note: Within the docs, you can test the endpoints very quickly which is great for testing.*
+
+## Docker
+
+You access the docker image for this API [here](https://hub.docker.com/repository/docker/gabeserna/songscribe-api/general).
 
 ## FAQs
 
