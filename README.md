@@ -93,12 +93,12 @@ curl -X POST "http://127.0.0.1:8000/split-audio" \
 
 | Parameter         | Type     | Required | Description                                                                               |
 |-------------------|----------|----------|-------------------------------------------------------------------------------------------|
-| `audio_file`      | `file`   | Yes      | The audio file to be processed (.mp3, .wav, .ogg, .flac).                                 |
+| `youtube_url`     | `string` | Yes      | The YouTube video URL from which to download the audio.                                   |
 | `separation_mode` | `string` | Yes      | The model to use for separation. Possible values:                                         |
-|                   |          |          | - `Duet`                                                                                   |
-|                   |          |          | - `Small Band`                                                                             |
-|                   |          |          | - `Full Band`                                                                              |
-| `tempo`           | `int`    | Yes      | The tempo in beats per minute of the song.                                                 | 
+|                   |          |          | - `Duet`                                                                                  |
+|                   |          |          | - `Small Band`                                                                            |
+|                   |          |          | - `Full Band`                                                                             |
+| `tempo`           | `int`    | Yes      | The tempo in beats per minute of the song.                                                | 
 | `start_time`      | `int`    | No       | The starting point of audio processing in seconds (default is `0`).                       |
 | `end_time`        | `int`    | No       | The endpoint of audio processing in seconds (default is the total duration of the audio). |
 
@@ -124,12 +124,12 @@ curl -X POST "http://127.0.0.1:8000/split-yt-audio" \
 
 ##### Request Parameters
 
-| Parameter         | Type     | Required | Description                                                                              |
-|-------------------|----------|----------|------------------------------------------------------------------------------------------|
-| `audio file`      | `string` | Yes      | The YouTube video URL from which to download the audio.                                  |
-| `tempo`           | `int`    | Yes      | The tempo in beats per minute of the song.                                               | 
-| `start_time`      | `int`    | No       | The starting point of audio alignment in seconds (default is `0`).                       |
-| `end_time`        | `int`    | No       | The endpoint of audio alignment in seconds (default is the total duration of the audio). |
+| Parameter         | Type   | Required | Description                                                                              |
+|-------------------|--------|----------|------------------------------------------------------------------------------------------|
+| `audio file`      | `file` | Yes      | The audio file to be processed (.mp3, .wav, .ogg, .flac).                                |
+| `tempo`           | `int`  | Yes      | The tempo in beats per minute of the song.                                               | 
+| `start_time`      | `int`  | No       | The starting point of audio alignment in seconds (default is `0`).                       |
+| `end_time`        | `int`  | No       | The endpoint of audio alignment in seconds (default is the total duration of the audio). |
 
 ##### Request Example
 
