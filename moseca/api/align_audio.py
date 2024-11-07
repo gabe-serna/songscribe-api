@@ -38,6 +38,7 @@ def align_audio(audio_file: str, tempo: int, output_dir: str, start_time: float 
             return
 
     # Load audio file
+    print(f"Aligning Audio for {audio_file}...")
     try:
         y, sr = librosa.load(audio_file, sr=None)
     except IOError:

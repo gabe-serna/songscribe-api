@@ -123,6 +123,31 @@ async def split_yt_audio(
         background_tasks=background_tasks,
     )
 
+@app.post("/yt-to-mp3")
+async def yt_to_mp3(
+    youtube_url: str = Form(...),
+    background_tasks: BackgroundTasks = None,
+):
+    temp_dir = Path("data/temp")
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        output_path = temp_dir
+        audio_filename = download_audio_from_youtube(youtube_url, str(output_path))
+        output_file = output_path / audio_filename
+
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=400)
+
+    # Schedule cleanup of temporary files after response is sent
+    if background_tasks is not None:
+        background_tasks.add_task(
+            cleanup_files,
+            [*temp_dir.glob("*")]
+        )
+
+    return FileResponse(path=str(output_file), media_type="audio/mpeg", filename=audio_filename)
+
 async def process_audio_file(
     input_file_path: Path,
     separation_mode: SeparationMode,
