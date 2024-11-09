@@ -111,6 +111,28 @@ curl -X POST "http://127.0.0.1:8000/split-yt-audio" \
 
 <br/><br/>
 
+#### `/yt-to-mp3`
+**Method**: `POST`  
+**Description**: Converts a YouTube video URL to an MP3 file.
+
+##### Request Parameters
+
+| Parameter     | Type     | Required | Description                                                     |
+|---------------|----------|----------|-----------------------------------------------------------------|
+| `youtube_url` | `string` | Yes      | The YouTube video URL from which to download and convert audio. |
+
+##### Request Example
+
+To send a request using **cURL**, you can use the following command:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/yt-to-mp3"
+  -F "youtube_url=https://www.youtube.com/watch?v=example"
+  --output downloaded_audio.mp3
+```
+
+<br/><br/>
+
 #### `/align-audio`
 **Method**: `POST`  
 **Description**: Remove silence from the beginning of a song, and align the start with the first measure.
@@ -323,7 +345,7 @@ requirements in your jurisdiction.
 
 `basic-pitch` is Copyright 2022 Spotify AB.
 
-This software is licensed under the Apache License, Version 2.0 (the "Apache License"). You may choose either license to govern your use of this software only upon the condition that you accept all of the terms of either the Apache License.
+This software is licensed under the Apache License, Version 2.0 (the "Apache License"). You may choose either license to govern your use of this software only upon the condition that you accept all the terms of either the Apache License.
 
 You may obtain a copy of the Apache License at:
 
