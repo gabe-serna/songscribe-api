@@ -4,7 +4,7 @@
 
 ---
 - [How to Use Songscribe API](#how-to-use-songscribe-api)
-  - [Start the Server](#start-the-server)
+  - [Quick Start](#quick-start)
   - [Endpoints](#endpoints)
 - [Local environment](#local-environment)
 - [Docker](#docker)
@@ -16,11 +16,11 @@
 
 
 ## How to Use Songscribe API
-### Start the Server
+### Quick Start
 
 Run the following command to start the local server:
 ```commandline
-uvicorn moseca.api.main:app --reload
+uvicorn moseca.api.main:app
 ```
 
 To exit, press `ctrl + C` on Windows or `cmd + C` on Mac

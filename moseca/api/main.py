@@ -1,5 +1,5 @@
-# main.py
-from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks
+import asyncio
+from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
@@ -8,6 +8,10 @@ from zipfile import ZipFile
 from enum import Enum
 from mido import MidiFile, MetaMessage
 import shutil
+import concurrent.futures
+import os
+import tempfile
+import mido
 
 # For /split-audio and /split-yt-audio
 from moseca.api.service.demucs_runner import separator
@@ -21,31 +25,74 @@ from basic_pitch.inference import predict_and_save
 from basic_pitch import ICASSP_2022_MODEL_PATH
 from moseca.api.quantize_midi import quantize_midi
 from moseca.api.get_key_signature import detect_key
-import os
-import tempfile
 
 # For Drum Transcription
 from moseca.api.tempo_chunking import tempo_chunking
 from moseca.api.prettyify import prettyify
 from adtof.model.model import Model
-import mido
 
 # Import YouTube audio downloader
 from moseca.api.service.youtube import download_audio_from_youtube
-
-# For /combine-midi
-from moseca.api.combine_midi import combine_midi
 
 app = FastAPI()
 
 # Allow CORS from frontend dev environment (localhost:3000)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "https://songscribe.xyz", "https://songscribe.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Create a global process pool executor for CPU-bound tasks
+cpu_bound_executor = concurrent.futures.ProcessPoolExecutor()
+
+class DisconnectionChecker:
+    def __init__(
+        self,
+        request: Request,
+        background_tasks: Optional[BackgroundTasks] = None,
+        files_to_cleanup: Optional[List[Path]] = None
+    ):
+        self.request = request
+        self.background_tasks = background_tasks
+        self.files_to_cleanup = files_to_cleanup
+        self._task = None
+        self._disconnected = asyncio.Event()
+
+    async def __aenter__(self):
+        # Start the periodic disconnection check
+        self._task = asyncio.create_task(self._periodic_check())
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        # Cancel the periodic check task when processing ends or if an exception occurs
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+
+        # If the client disconnected, clean up and raise an HTTPException
+        if self._disconnected.is_set():
+            if self.background_tasks and self.files_to_cleanup:
+                self.background_tasks.add_task(cleanup_files, self.files_to_cleanup)
+            raise HTTPException(status_code=499, detail="Client disconnected")
+
+        return False  # Re-raise any other exceptions
+
+    async def _periodic_check(self):
+        while True:
+            # Sleep for 5 seconds between checks
+            await asyncio.sleep(5)
+
+            # Check if the client has disconnected
+            if await self.request.is_disconnected():
+                self._disconnected.set()
+                print("--DISCONNECTING--")
+                break
 
 # Enum for separation modes with form validation
 class SeparationMode(str, Enum):
@@ -66,6 +113,7 @@ separation_mode_to_model = {
 
 @app.post("/split-audio")
 async def split_audio(
+    request: Request,
     audio_file: UploadFile = File(...),
     separation_mode: SeparationMode = Form(...),
     tempo: int = Form(...),
@@ -73,27 +121,30 @@ async def split_audio(
     end_time: Optional[int] = Form(None),
     background_tasks: BackgroundTasks = None,
 ):
-    # Create temporary directories
     temp_dir = Path("data/temp")
     temp_dir.mkdir(parents=True, exist_ok=True)
+
     input_file_path = temp_dir / audio_file.filename
 
     # Save the uploaded file
     with open(input_file_path, "wb") as f:
         shutil.copyfileobj(audio_file.file, f)
 
-    # Process the audio file
-    return await process_audio_file(
-        input_file_path=input_file_path,
-        separation_mode=separation_mode,
-        tempo=tempo,
-        start_time=start_time,
-        end_time=end_time,
-        background_tasks=background_tasks,
-    )
+    # Check for disconnection and process the audio file within the DisconnectionChecker context
+    async with DisconnectionChecker(request, background_tasks, [*temp_dir.glob("*")]):
+        return await process_audio_file(
+            request=request,
+            input_file_path=input_file_path,
+            separation_mode=separation_mode,
+            tempo=tempo,
+            start_time=start_time,
+            end_time=end_time,
+            background_tasks=background_tasks,
+        )
 
 @app.post("/split-yt-audio")
 async def split_yt_audio(
+    request: Request,
     youtube_url: str = Form(...),
     separation_mode: SeparationMode = Form(...),
     tempo: int = Form(...),
@@ -107,48 +158,57 @@ async def split_yt_audio(
     try:
         # Download the audio from YouTube URL
         output_path = temp_dir
-        audio_filename = download_audio_from_youtube(youtube_url, str(output_path))
+        # Use asyncio.to_thread for I/O-bound task of downloading
+        audio_filename = await asyncio.to_thread(
+            download_audio_from_youtube, youtube_url, str(output_path)
+        )
         input_file_path = output_path / audio_filename
-
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=400)
 
-    # Process the downloaded audio file
-    return await process_audio_file(
-        input_file_path=input_file_path,
-        separation_mode=separation_mode,
-        tempo=tempo,
-        start_time=start_time,
-        end_time=end_time,
-        background_tasks=background_tasks,
-    )
+    # Check for disconnection and process the audio file within the DisconnectionChecker context
+    async with DisconnectionChecker(request, background_tasks, [*temp_dir.glob("*")]):
+        return await process_audio_file(
+            request=request,
+            input_file_path=input_file_path,
+            separation_mode=separation_mode,
+            tempo=tempo,
+            start_time=start_time,
+            end_time=end_time,
+            background_tasks=background_tasks,
+        )
 
 @app.post("/yt-to-mp3")
 async def yt_to_mp3(
+    request: Request,
     youtube_url: str = Form(...),
     background_tasks: BackgroundTasks = None,
 ):
     temp_dir = Path("data/temp")
     temp_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        output_path = temp_dir
-        audio_filename = download_audio_from_youtube(youtube_url, str(output_path))
-        output_file = output_path / audio_filename
+    async with DisconnectionChecker(request, background_tasks, [*temp_dir.glob("*")]):
+        try:
+            output_path = temp_dir
+            # Use asyncio.to_thread for I/O-bound download task
+            audio_filename = await asyncio.to_thread(
+                download_audio_from_youtube, youtube_url, str(output_path)
+            )
+            output_file = output_path / audio_filename
+        except Exception as e:
+            return JSONResponse(content={"error": str(e)}, status_code=400)
 
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=400)
+        # Schedule cleanup of temporary files after response is sent
+        if background_tasks is not None:
+            background_tasks.add_task(
+                cleanup_files,
+                [*temp_dir.glob("*")]
+            )
 
-    # Schedule cleanup of temporary files after response is sent
-    if background_tasks is not None:
-        background_tasks.add_task(
-            cleanup_files,
-            [*temp_dir.glob("*")]
-        )
-
-    return FileResponse(path=str(output_file), media_type="audio/mpeg", filename=audio_filename)
+        return FileResponse(path=str(output_file), media_type="audio/mpeg", filename=audio_filename)
 
 async def process_audio_file(
+    request: Request,
     input_file_path: Path,
     separation_mode: SeparationMode,
     tempo: int,
@@ -164,35 +224,40 @@ async def process_audio_file(
 
     model_name, file_sources = separation_mode_to_model[separation_mode.value]
 
-    # Align audio and trim
-    align_audio(str(input_file_path), tempo, str(temp_dir), start_time, end_time)
+    # Align audio and trim (likely I/O-bound, so using asyncio.to_thread)
+    await asyncio.to_thread(align_audio, str(input_file_path), tempo, str(temp_dir), start_time, end_time)
     processed_input_path = temp_dir / f"processed_{input_file_path.name}"
 
     # Output directory for separated tracks
     output_dir = temp_dir / "output"
     output_dir.mkdir(exist_ok=True)
 
-    # Perform audio source separation
-    stem = None
-    if separation_mode == SeparationMode.Duet:
-        stem = "vocals"
+    # Perform audio source separation within the DisconnectionChecker context
+    async with DisconnectionChecker(request, background_tasks, [*temp_dir.glob("*")]):
+        stem = None
+        if separation_mode == SeparationMode.Duet:
+            stem = "vocals"
 
-    separator(
-        tracks=[processed_input_path],
-        out=output_dir,
-        model=model_name,
-        shifts=1,
-        overlap=0.5,
-        stem=stem,
-        int24=False,
-        float32=False,
-        clip_mode="rescale",
-        mp3=True,
-        mp3_bitrate=320,
-        verbose=True,
-        start_time=start_time,
-        end_time=end_time,
-    )
+        # Run the separator function in a process pool to avoid blocking the event loop
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            cpu_bound_executor,
+            separator,
+            [processed_input_path],
+            output_dir,
+            model_name,
+            1,
+            0.5,
+            stem,
+            False,
+            False,
+            "rescale",
+            True,
+            320,
+            True,
+            start_time,
+            end_time,
+        )
 
     processed_input_name = processed_input_path.stem
     if model_name == "vocal_remover":
@@ -228,6 +293,7 @@ async def process_audio_file(
 
 @app.post("/align-audio")
 async def align_audio_endpoint(
+    request: Request,
     audio_file: UploadFile = File(...),
     tempo: int = Form(...),
     start_time: int = Form(0),
@@ -237,39 +303,44 @@ async def align_audio_endpoint(
     # Create temporary directories
     temp_dir = Path("data/temp")
     temp_dir.mkdir(parents=True, exist_ok=True)
+
     input_file_path = temp_dir / audio_file.filename
 
     # Save the uploaded file
     with open(input_file_path, "wb") as f:
         shutil.copyfileobj(audio_file.file, f)
 
-    # Align audio and trim
-    align_audio(str(input_file_path), tempo, str(temp_dir), start_time, end_time)
-    processed_file_name = f"processed_{input_file_path.name}"
-    processed_input_path = temp_dir / processed_file_name
-
-    # Determine the correct MIME type
-    mime_type, _ = mimetypes.guess_type(processed_input_path.name)
-    if mime_type is None:
-        mime_type = "application/octet-stream"
-
-    # Schedule cleanup of temporary files after response is sent
-    if background_tasks is not None:
-        background_tasks.add_task(
-            cleanup_files,
-            [input_file_path, processed_input_path],
+    # Align audio and trim within the DisconnectionChecker context (likely I/O-bound)
+    async with DisconnectionChecker(request, background_tasks, [*temp_dir.glob("*")]):
+        await asyncio.to_thread(
+            align_audio, str(input_file_path), tempo, str(temp_dir), start_time, end_time
         )
+        processed_file_name = f"processed_{input_file_path.name}"
+        processed_input_path = temp_dir / processed_file_name
 
-    # Return the aligned audio
-    if processed_input_path.exists():
-        return FileResponse(
-            path=str(processed_input_path),
-            media_type=mime_type,
-            filename=processed_file_name,
-        )
+        # Determine the correct MIME type
+        mime_type, _ = mimetypes.guess_type(processed_input_path.name)
+        if mime_type is None:
+            mime_type = "application/octet-stream"
+
+        # Schedule cleanup of temporary files after response is sent
+        if background_tasks is not None:
+            background_tasks.add_task(
+                cleanup_files,
+                [input_file_path, processed_input_path],
+            )
+
+        # Return the aligned audio
+        if processed_input_path.exists():
+            return FileResponse(
+                path=str(processed_input_path),
+                media_type=mime_type,
+                filename=processed_file_name,
+            )
 
 @app.post("/audio-to-midi")
 async def audio_to_midi(
+    request: Request,
     audio_file: UploadFile = File(...),
     onset_threshold: Optional[float] = Form(None),
     frame_threshold: Optional[float] = Form(None),
@@ -283,6 +354,7 @@ async def audio_to_midi(
     # Create temporary directories
     temp_dir = Path("data/temp")
     temp_dir.mkdir(parents=True, exist_ok=True)
+
     base_stem = audio_file.filename.split(".")[0]
     input_file_path = temp_dir / f"base_{audio_file.filename}"
 
@@ -301,142 +373,160 @@ async def audio_to_midi(
     tempo = tempo if tempo is not None else 120
 
     try:
-        if percussion:
-            # **Drum Transcription Process**
+        async with DisconnectionChecker(request, background_tasks, [*temp_dir.glob("*"), *output_directory.glob("*")]):
+            if percussion:
+                # **Drum Transcription Process**
 
-            modelName = "Frame_RNN"
-            model, hparams = Model.modelFactory(modelName=modelName, scenario="adtofAll", fold=0)
-
-            # Perform transcription
-            model.predictFolder(str(input_file_path), str(output_directory), **hparams)
-            midi_file_name = "base_" + audio_file.filename + ".mid"
-            midi_file_path = output_directory / midi_file_name
-
-            # Remap Tempo (default output is 120bpm)
-            scaling_factor = tempo / 120
-            mid = mido.MidiFile(midi_file_path)
-            new_mid = mido.MidiFile(ticks_per_beat=mid.ticks_per_beat)
-
-            for track in mid.tracks:
-                new_track = mido.MidiTrack()
-                new_mid.tracks.append(new_track)
-
-                # Insert tempo meta message at the beginning of the track
-                tempo_meta = mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(tempo), time=0)
-                new_track.append(tempo_meta)
-
-                for msg in track:
-                    # Adjust the time (delta time)
-                    adjusted_time = int(msg.time * scaling_factor)
-                    msg = msg.copy(time=adjusted_time)
-                    new_track.append(msg)
-
-            # Save the new MIDI file with adjusted note timings and tempo
-            new_mid.save(midi_file_path)
-
-            if not midi_file_path.exists():
-                return JSONResponse(content={"error": "MIDI file was not generated"}, status_code=500)
-
-            # Quantize the MIDI file
-            quantize_midi(str(midi_file_path), tempo, str(output_directory))
-            quantized_midi_file_name = f"quantized_{midi_file_name}"
-            quantized_midi_file_path = output_directory / quantized_midi_file_name
-            if not quantized_midi_file_path.exists():
-                return JSONResponse(content={"error": "Quantized MIDI file was not generated"}, status_code=500)
-
-            # Adjust Tempo by Chunking
-            tempo_chunking(str(quantized_midi_file_path), tempo, str(output_directory))
-            adjusted_midi_file_name = f"adjusted_{quantized_midi_file_name}"
-            adjusted_midi_file_path = output_directory / adjusted_midi_file_name
-            if not adjusted_midi_file_path.exists():
-                return JSONResponse(content={"error": "Adjusted MIDI file was not generated"}, status_code=500)
-
-            # Prettyify the MIDI file
-            prettyify(str(adjusted_midi_file_path), str(output_directory))
-            pretty_midi_file_name = f"prettyified_{adjusted_midi_file_name}"
-            pretty_midi_file_path = output_directory / pretty_midi_file_name
-
-            # Rename Output File
-            final_name = base_stem + ".mid"
-            final_path = output_directory / final_name
-            pretty_midi_file_path.rename(final_path)
-
-            # Return the adjusted MIDI file as a response
-            if background_tasks is not None:
-                background_tasks.add_task(cleanup_files, [*temp_dir.glob("*"), *output_directory.glob("*")])
-
-            if final_path.exists():
-                return FileResponse(
-                    path=str(final_path),
-                    media_type="audio/midi",
-                    filename=final_name,
+                model_name = "Frame_RNN"
+                # Use to_thread for I/O or CPU-limited code if Model initialization is costly
+                model, hparams = await asyncio.to_thread(
+                    Model.modelFactory, modelName=model_name, scenario="adtofAll", fold=0
                 )
+
+                # Perform transcription in a process pool if CPU-bound
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    cpu_bound_executor,
+                    model.predictFolder,
+                    str(input_file_path),
+                    str(output_directory),
+                )
+
+                midi_file_name = "base_" + audio_file.filename + ".mid"
+                midi_file_path = output_directory / midi_file_name
+
+                # Remap Tempo (default output is 120bpm)
+                scaling_factor = tempo / 120
+                mid = MidiFile(midi_file_path)
+                new_mid = MidiFile(ticks_per_beat=mid.ticks_per_beat)
+
+                for track in mid.tracks:
+                    new_track = mido.MidiTrack()
+                    new_mid.tracks.append(new_track)
+
+                    # Insert tempo meta message at the beginning of the track
+                    tempo_meta = MetaMessage("set_tempo", tempo=mido.bpm2tempo(tempo), time=0)
+                    new_track.append(tempo_meta)
+
+                    for msg in track:
+                        # Adjust the time (delta time)
+                        adjusted_time = int(msg.time * scaling_factor)
+                        msg = msg.copy(time=adjusted_time)
+                        new_track.append(msg)
+
+                # Save the new MIDI file with adjusted note timings and tempo
+                new_mid.save(midi_file_path)
+
+                if not midi_file_path.exists():
+                    return JSONResponse(content={"error": "MIDI file was not generated"}, status_code=500)
+
+                # Quantize the MIDI file
+                await asyncio.to_thread(
+                    quantize_midi, str(midi_file_path), tempo, str(output_directory)
+                )
+                quantized_midi_file_name = f"quantized_{midi_file_name}"
+                quantized_midi_file_path = output_directory / quantized_midi_file_name
+                if not quantized_midi_file_path.exists():
+                    return JSONResponse(content={"error": "Quantized MIDI file was not generated"}, status_code=500)
+
+                # Adjust Tempo by Chunking
+                await asyncio.to_thread(
+                    tempo_chunking, str(quantized_midi_file_path), tempo, str(output_directory)
+                )
+                adjusted_midi_file_name = f"adjusted_{quantized_midi_file_name}"
+                adjusted_midi_file_path = output_directory / adjusted_midi_file_name
+                if not adjusted_midi_file_path.exists():
+                    return JSONResponse(content={"error": "Adjusted MIDI file was not generated"}, status_code=500)
+
+                # Prettyify the MIDI file
+                await asyncio.to_thread(
+                    prettyify, str(adjusted_midi_file_path), str(output_directory)
+                )
+                pretty_midi_file_name = f"prettyified_{adjusted_midi_file_name}"
+                pretty_midi_file_path = output_directory / pretty_midi_file_name
+
+                # Rename Output File
+                final_name = base_stem + ".mid"
+                final_path = output_directory / final_name
+                pretty_midi_file_path.rename(final_path)
+
+                # Return the adjusted MIDI file as a response
+                if background_tasks is not None:
+                    background_tasks.add_task(cleanup_files, [*temp_dir.glob("*"), *output_directory.glob("*")])
+
+                if final_path.exists():
+                    return FileResponse(
+                        path=str(final_path),
+                        media_type="audio/midi",
+                        filename=final_name,
+                    )
+                else:
+                    return JSONResponse(
+                        content={"error": "Final MIDI file was not generated"}, status_code=500)
             else:
-                return JSONResponse(
-                    content={"error": "Final MIDI file was not generated"}, status_code=500
+                # **Default Audio-to-MIDI Process**
+                # Likely CPU-bound, so run in a separate process
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    cpu_bound_executor,
+                    predict_and_save,
+                    [input_file_path],
+                    str(output_directory),
+                    True,
+                    False,
+                    False,
+                    False,
+                    ICASSP_2022_MODEL_PATH,
+                    onset_threshold,
+                    frame_threshold,
+                    minimum_note_length,
+                    minimum_frequency,
+                    maximum_frequency,
+                    tempo,
                 )
-        else:
-            # **Default Audio-to-MIDI Process**
 
-            predict_and_save(
-                audio_path_list=[input_file_path],
-                output_directory=output_directory,
-                save_midi=True,
-                sonify_midi=False,
-                save_model_outputs=False,
-                save_notes=False,
-                model_or_model_path=ICASSP_2022_MODEL_PATH,
-                onset_threshold=onset_threshold,
-                frame_threshold=frame_threshold,
-                minimum_note_length=minimum_note_length,
-                minimum_frequency=minimum_frequency,
-                maximum_frequency=maximum_frequency,
-                midi_tempo=tempo,
-            )
+                # Construct the MIDI file path
+                midi_file_name = input_file_path.stem + "_basic_pitch.mid"
+                midi_file_path = output_directory / midi_file_name
 
-            # Construct the MIDI file path
-            midi_file_name = input_file_path.stem + "_basic_pitch.mid"
-            midi_file_path = output_directory / midi_file_name
+                # Check if the MIDI file was generated
+                if not midi_file_path.exists():
+                    return JSONResponse(content={"error": "MIDI file was not generated"}, status_code=500)
 
-            # Check if the MIDI file was generated
-            if not midi_file_path.exists():
-                return JSONResponse(content={"error": "MIDI file was not generated"}, status_code=500)
+                # Quantize the MIDI file
+                await asyncio.to_thread(quantize_midi, str(midi_file_path), tempo, str(output_directory))
+                quantized_midi_file_name = f"quantized_{midi_file_name}"
+                quantized_midi_file_path = output_directory / quantized_midi_file_name
 
-            # Quantize the MIDI file
-            quantize_midi(str(midi_file_path), tempo, str(output_directory))
-            quantized_midi_file_name = f"quantized_{midi_file_name}"
-            quantized_midi_file_path = output_directory / quantized_midi_file_name
+                # Rename Output File
+                final_name = base_stem + ".mid"
+                final_path = output_directory / final_name
+                quantized_midi_file_path.rename(final_path)
 
-            # Rename Output File
-            final_name = base_stem + ".mid"
-            final_path = output_directory / final_name
-            quantized_midi_file_path.rename(final_path)
+                # Get the key signature and append it to the MIDI File
+                key_info = detect_key(str(input_file_path))
+                key = key_info['key']
+                mode = key_info['mode']
 
-            # Get the key signature and sppend it to the MIDI File
-            key_info = detect_key(str(input_file_path))
-            key = key_info['key']
-            mode = key_info['mode']
+                if mode == "Major":
+                    midi_key = key
+                else:
+                    midi_key = f"{key}m"
+                append_key_signature(str(final_path), midi_key)
 
-            if mode == "Major":
-                midi_key = key
-            else:
-                midi_key = f"{key}m"
-            append_key_signature(str(final_path), midi_key)
+                if background_tasks is not None:
+                    background_tasks.add_task(cleanup_files, [*temp_dir.glob("*"), *output_directory.glob("*")])
 
-            if background_tasks is not None:
-                background_tasks.add_task(cleanup_files, [*temp_dir.glob("*"), *output_directory.glob("*")])
-
-            if final_path.exists():
-                # Return the quantized MIDI file as a response
-                return FileResponse(
-                    path=str(final_path),
-                    media_type="audio/midi",
-                    filename=final_name,
-                )
-            else:
-                return JSONResponse(
-                    content={"error": "Final MIDI file was not generated"}, status_code=500
-                )
+                if final_path.exists():
+                    # Return the quantized MIDI file as a response
+                    return FileResponse(
+                        path=str(final_path),
+                        media_type="audio/midi",
+                        filename=final_name,
+                    )
+                else:
+                    return JSONResponse(
+                        content={"error": "Final MIDI file was not generated"}, status_code=500)
 
     except Exception as e:
         # Cleanup files in case of an error
@@ -446,45 +536,6 @@ async def audio_to_midi(
             cleanup_files([*temp_dir.glob("*"), *output_directory.glob("*")])
         print(f"Error: {e}")
         return JSONResponse(content={"error": "MIDI conversion failed"}, status_code=500)
-
-class Mode(str, Enum):
-    minor = "Minor"
-    major = "Major"
-
-@app.post("/combine-midi")
-async def combine_midi_endpoint(
-    midi_files: List[UploadFile] = File(...),
-    background_tasks: BackgroundTasks = None,
-):
-    # Create temporary directory
-    temp_dir = Path("data/temp")
-    temp_dir.mkdir(parents=True, exist_ok=True)
-
-    midi_file_paths = []
-    for midi_file in midi_files:
-        input_file_path = temp_dir / midi_file.filename
-        with open(input_file_path, "wb") as f:
-            shutil.copyfileobj(midi_file.file, f)
-        midi_file_paths.append(str(input_file_path))
-
-    # Run combine_midi function
-    output_file_path = combine_midi(midi_file_paths, "Pixel Summer")
-
-    # Schedule cleanup of temporary files after response is sent
-    if background_tasks is not None:
-        background_tasks.add_task(
-            cleanup_files,[*temp_dir.glob("*")]
-        )
-
-    # Return the combined MIDI file
-    if os.path.exists(output_file_path):
-        return FileResponse(
-            path=output_file_path,
-            media_type="audio/midi",
-            filename="combined.mid",
-        )
-    else:
-        return {"error": "Combined MIDI file not found."}
 
 def cleanup_files(file_paths: List[Path]):
     for path in file_paths:
