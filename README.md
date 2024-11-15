@@ -1,203 +1,55 @@
-<h2 align="center">Songscribe API</h1>
+<h1 align="center">Songscribe API</h1>
+<p align="center"><i>Instrument Splitter & Midi Converter API for <a href="https://github.com/gabe-serna/songscribe">Songscribe</a></i></p>
+
+<hr/>
+
 <p align="center">
+  <a href="#quick-start"><strong>Quick Start</strong></a> ♫
+  <a href="#docker"><strong>Docker</strong></a> ♫
+  <a href="#manual-installation"><strong>Manual Installation</strong></a> ♫
+  <a href="#attribution"><strong>Attribution</strong></a>
 </p>
 
----
-- [How to Use Songscribe API](#how-to-use-songscribe-api)
-  - [Quick Start](#quick-start)
-  - [Endpoints](#endpoints)
-- [Local environment](#local-environment)
-- [Docker](#docker)
-- [FAQs](#faqs)
-  - [How does it work?](#how-does-it-work)
-  - [How does Moseca work?](#how-does-moseca-work)
-- [Disclaimer](#disclaimer)
----
+<br/>
 
+## Quick Start
 
-## How to Use Songscribe API
-### Quick Start
-
-Run the following command to start the local server:
+If you've manually installed the API, run the following command to start the local server:
 ```commandline
 uvicorn moseca.api.main:app
 ```
 
 To exit, press `ctrl + C` on Windows or `cmd + C` on Mac
 
-Visit `/docs` for a list of all available endpoints with details, along with tools for testing the endpoint.
+Visit [`localhost:8000/docs`](http://localhost:8000/docs) for a list of all available endpoints with details, along with tools for testing the endpoint.
 
-### Endpoints
+Documentation about the endpoints of the API can be found in [DOCS.md](https://github.com/gabe-serna/songscribe-api/blob/main/README.md) or at [Dockerhub](https://hub.docker.com/r/gabeserna/songscribe-api).
 
-#### `/split-audio`
-**Method**: `POST`  
-**Description**: Upload an audio file and specify the separation mode to separate the audio tracks.
+<br/><br/>
 
-##### Request Parameters
+## Docker
 
-| Parameter         | Type     | Required | Description                                                                               |
-|-------------------|----------|----------|-------------------------------------------------------------------------------------------|
-| `audio_file`      | `file`   | Yes      | The audio file to be processed (.mp3, .wav, .ogg, .flac).                                 |
-| `separation_mode` | `string` | Yes      | The model to use for separation. Possible values:                                         |
-|                   |          |          | - `Duet`                                                                                  |
-|                   |          |          | - `Small Band`                                                                            |
-|                   |          |          | - `Full Band`                                                                             |
-| `tempo`           | `int`    | Yes      | The tempo in beats per minute of the song.                                                | 
-| `start_time`      | `int`    | No       | The starting point of audio processing in seconds (default is `0`).                       |
-| `end_time`        | `int`    | No       | The endpoint of audio processing in seconds (default is the total duration of the audio). |
+This API has been [Dockerized](https://hub.docker.com/r/gabeserna/songscribe-api/tags) for easy deployment! If you have Docker Desktop installed you can follow along with the instructions here, otherwise you  can follow the instructions for [Manual Installation](#manual-installation).
 
-##### Separation Modes Explained
+First, open up a terminal or command prompt and pull the Docker image *(make sure Docker Desktop is running)*. Then, run the image in a container.
 
-- **Duet**:
-  - **Description**: Separates the track into vocals and instrumental components.
-  - **Files Generated**: `vocals.mp3`, `no_vocals.mp3`
-
-- **Small Band**:
-  - **Description**: Separates the track into vocals, drums, bass, and other instruments.
-  - **Files Generated**: `vocals.mp3`, `drums.mp3`, `bass.mp3`, `other.mp3`
-
-- **Full Band**:
-  - **Description**: Separates the track into vocals, drums, bass, guitar, piano, and other instruments.
-  - **Files Generated**: `vocals.mp3`, `drums.mp3`, `bass.mp3`, `guitar.mp3`, `piano.mp3`, `other.mp3`
-
-##### Request Example
-
-To send a request using **cURL**, you can use the following command:
-
-```bash
-curl -X POST "http://127.0.0.1:8000/split-audio" \
-  -F "audio_file=@/path/to/your/audiofile.mp3" \
-  -F "separation_mode=Duet" \
-  -F "tempo=120" \
-  -F "start_time=0" \
-  -F "end_time=60" \
-  --output output.zip
+```commandline
+docker pull gabeserna/songscribe-api:latest
+docker run -p 8000:8000 gabeserna/songscribe-api:latest
 ```
+> *If you are using the Docker Desktop GUI, make sure to set the port to 8000 when creating the container.*
+
+<br/>
+
+You can check to see if the API is running by going to [`localhost:8000/docs`](http://localhost:8000/docs).
+
+> *The Docker image may take between 5-15 minutes to pull depending primarily on your network speed.*
 
 <br/><br/>
 
+## Manual Installation
 
-#### `/split-yt-audio`
-**Method**: `POST`  
-**Description**: Provide a YouTube URL to download its audio and specify the separation mode to separate the audio tracks.
-> This endpoint is identical to `/split-audio`, except this endpoint you provide a YouTube URL instead of an audio file.
-
-##### Request Parameters
-
-| Parameter         | Type     | Required | Description                                                                               |
-|-------------------|----------|----------|-------------------------------------------------------------------------------------------|
-| `youtube_url`     | `string` | Yes      | The YouTube video URL from which to download the audio.                                   |
-| `separation_mode` | `string` | Yes      | The model to use for separation. Possible values:                                         |
-|                   |          |          | - `Duet`                                                                                  |
-|                   |          |          | - `Small Band`                                                                            |
-|                   |          |          | - `Full Band`                                                                             |
-| `tempo`           | `int`    | Yes      | The tempo in beats per minute of the song.                                                | 
-| `start_time`      | `int`    | No       | The starting point of audio processing in seconds (default is `0`).                       |
-| `end_time`        | `int`    | No       | The endpoint of audio processing in seconds (default is the total duration of the audio). |
-
-##### Request Example
-
-To send a request using **cURL**, you can use the following command:
-
-```bash
-curl -X POST "http://127.0.0.1:8000/split-yt-audio" \
-  -F "youtube_url=https://www.youtube.com/watch?v=example" \
-  -F "separation_mode=Small Band" \
-  -F "tempo=120" \
-  -F "start_time=0" \
-  -F "end_time=60" \
-  --output output.zip
- ```
-
-<br/><br/>
-
-#### `/yt-to-mp3`
-**Method**: `POST`  
-**Description**: Converts a YouTube video URL to an MP3 file.
-
-##### Request Parameters
-
-| Parameter     | Type     | Required | Description                                                     |
-|---------------|----------|----------|-----------------------------------------------------------------|
-| `youtube_url` | `string` | Yes      | The YouTube video URL from which to download and convert audio. |
-
-##### Request Example
-
-To send a request using **cURL**, you can use the following command:
-
-```bash
-curl -X POST "http://127.0.0.1:8000/yt-to-mp3"
-  -F "youtube_url=https://www.youtube.com/watch?v=example"
-  --output downloaded_audio.mp3
-```
-
-<br/><br/>
-
-#### `/align-audio`
-**Method**: `POST`  
-**Description**: Remove silence from the beginning of a song, and align the start with the first measure.
-
-##### Request Parameters
-
-| Parameter         | Type   | Required | Description                                                                              |
-|-------------------|--------|----------|------------------------------------------------------------------------------------------|
-| `audio file`      | `file` | Yes      | The audio file to be processed (.mp3, .wav, .ogg, .flac).                                |
-| `tempo`           | `int`  | Yes      | The tempo in beats per minute of the song.                                               | 
-| `start_time`      | `int`  | No       | The starting point of audio alignment in seconds (default is `0`).                       |
-| `end_time`        | `int`  | No       | The endpoint of audio alignment in seconds (default is the total duration of the audio). |
-
-##### Request Example
-
-To send a request using **cURL**, you can use the following command:
-
-```bash
-curl -X POST "http://127.0.0.1:8000/align-audio" \
-  -F "audio_file=@/path/to/your/audiofile.mp3" \
-  -F "tempo=120" \
-  -F "start_time=0" \
-  -F "end_time=60" \
-  --output processed_audiofile.mp3
- ```
-
-<br/><br/>
-
-#### `/audio-to-midi`
-**Method**: `POST`  
-**Description**: Converts an audio file to a MIDI file by extracting musical notes and events from the audio.
-
-##### Request Parameters
-
-| Parameter             | Type      | Required | Description                                                                                |
-|-----------------------|-----------|----------|--------------------------------------------------------------------------------------------|
-| `audio_file`          | `file`    | Yes      | The audio file to be converted (e.g., MP3, WAV).                                           |
-| `onset_threshold`     | `float`   | No       | The threshold for detecting the onset of notes (default: `0.5`).                           |
-| `frame_threshold`     | `float`   | No       | The threshold for detecting individual frames (default: `0.3`).                            |
-| `minimum_note_length` | `float`   | No       | The minimum duration (in seconds) for detected notes (default: `127.70`).                  |
-| `minimum_frequency`   | `float`   | No       | The minimum frequency for note detection.                                                  |
-| `maximum_frequency`   | `float`   | No       | The maximum frequency for note detection.                                                  |
-| `tempo`               | `int`     | No       | The tempo to be applied in the MIDI output (in BPM, default: `120`).                       |
-| `percussion`          | `boolean` | No       | Determines if the audio should be converted as a percussive instrument (default: `false`). |
-
-##### Request Example
-
-```bash
-curl -X POST "http://127.0.0.1:8000/audio-to-midi" \
-  -F "audio_file=@/path/to/your/audiofile.wav" \
-  -F "onset_threshold=0.5" \
-  -F "frame_threshold=0.3" \
-  -F "minimum_note_length=127.70" \
-  -F "minimum_frequency=200" \
-  -F "maximum_frequency=8000" \
-  -F "tempo=120" \
-  -F "percussion=false"
-  --output audiofile.mid
-```
-
-------
-
-## Local Environment
-
-> *Note: Using Python 3.12 **will not** work! Please use Python 3.11.*
+> *Using Python 3.12 **will not** work! Please use Python 3.11.*
 
 ### Prerequisites
 
@@ -208,7 +60,7 @@ curl -X POST "http://127.0.0.1:8000/audio-to-midi" \
 
 First, clone the Songscribe API repository to your local machine:
 
-```bash
+```commandline
 git clone https://github.com/gabe-serna/songscribe-api.git
 cd songscribe-api
 ```
@@ -223,13 +75,13 @@ Creating a virtual environment ensures that dependencies are managed separately 
 
 2. Create a virtual environment named `venv`:
 
-    ```powershell
+    ```commandline
     python -m venv venv
     ```
 
 3. Activate the virtual environment:
 
-    ```powershell
+    ```commandline
     .\venv\Scripts\Activate
     ```
 
@@ -239,13 +91,13 @@ Creating a virtual environment ensures that dependencies are managed separately 
 
 2. Create a virtual environment named `venv`:
 
-    ```bash
+    ```commandline
     python3 -m venv venv
     ```
 
 3. Activate the virtual environment:
 
-    ```bash
+    ```commandline
     source venv/bin/activate
     ```
 
@@ -255,13 +107,13 @@ Creating a virtual environment ensures that dependencies are managed separately 
 
 1. Set Python to use UTF-8 encoding:
 
-    ```powershell
+    ```commandline
     $env:PYTHONUTF8=1
     ```
 
 2. Verify that UTF-8 encoding is enabled:
 
-    ```powershell
+    ```commandline
     echo $env:PYTHONUTF8
     ```
 
@@ -271,13 +123,13 @@ Creating a virtual environment ensures that dependencies are managed separately 
 
 1. Set Python to use UTF-8 encoding:
 
-    ```bash
+    ```commandline
     export PYTHONUTF8=1
     ```
 
 2. Verify that UTF-8 encoding is enabled:
 
-    ```bash
+    ```commandline
     echo $PYTHONUTF8
     ```
 
@@ -287,7 +139,7 @@ Creating a virtual environment ensures that dependencies are managed separately 
 
 Before installing the project dependencies, ensure that `pip` is up-to-date and install `wheel`:
 
-```bash
+```commandline
 pip install --upgrade pip
 pip install wheel
 ```
@@ -296,7 +148,7 @@ pip install wheel
 
 With the virtual environment activated and `pip` updated, install the required packages:
 
-```bash
+```commandline
 pip install -r requirements.txt
 ```
 
@@ -304,49 +156,34 @@ pip install -r requirements.txt
 
 Start the FastAPI server using Uvicorn:
 
-```bash
-uvicorn moseca.api.main:app --reload
+```commandline
+uvicorn moseca.api.main:app
 ```
 
-- The `--reload` flag enables auto-reloading of the server upon code changes.
+Just to note, you will see some Tensorflow warnings as the server is being started. You can safely ignore these. The server will be up and running once you see the following message in your terminal:
+```text
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+```
 
 ### 8. Access the API Documentation
 
-Once the server is running, navigate to [`http://127.0.0.1:8000/docs`](http://127.0.0.1:8000/docs) in your web browser to access the interactive API documentation provided by Swagger UI.
+Once the server is running, navigate to [`localhost:8000/docs`](http://localhost:8000/docs) in your web browser to access the interactive API documentation provided by Swagger UI.
 
-> *Note: Within the docs, you can test the endpoints very quickly which is great for testing.*
+> *Within the docs, you can access the endpoints very quickly which is great for testing.*
 
-## Docker
+<br/><br/>
 
-You access the docker image for this API [here](https://hub.docker.com/r/gabeserna/songscribe-api).
 
-## FAQs
+### Attribution
 
-### How does it work?
+The Songscribe API is built off mainly three open source technologies: 
+- [**Moseca**](https://github.com/fabiogra/moseca) for stem separation and vocal isolation
+  - Licensed under the [MIT License](https://opensource.org/license/MIT).
+- [**Basic Pitch**](https://github.com/spotify/basic-pitch) for audio-to-MIDI conversion
+  - Copyright 2022 Spotify AB and is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+- [**ADTOF**](https://github.com/MZehren/ADTOF) for drum transcription
+  - Licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
-The Songscribe API is built off two open source technologies: Moseca for stem separation and Basic-Pitch for audio to midi. 
-
-Moseca is an open-source web app that utilizes advanced AI technology to separate vocals and
-instrumentals from music tracks. It also provides an online karaoke experience by allowing you
-to search for any song on YouTube and remove the vocals.
-
-Basic Pitch is a Python library for Automatic Music Transcription (AMT), using lightweight neural network developed by Spotify's Audio Intelligence Lab. 
-
-### How does Moseca work?
-Moseca utilizes the Hybrid Spectrogram and Waveform Source Separation ([DEMUCS](https://github.com/facebookresearch/demucs)) model from Facebook. For fast karaoke vocal removal, Moseca uses the AI vocal remover developed by [tsurumeso](https://github.com/tsurumeso/vocal-remover).
-
-## Disclaimer
-
-`moseca` is designed to separate vocals and instruments from copyrighted music for
-legally permissible purposes, such as learning, practicing, research, or other non-commercial
-activities that fall within the scope of fair use or exceptions to copyright. As a user, you are
-responsible for ensuring that your use of separated audio tracks complies with the legal
-requirements in your jurisdiction.
-
-`basic-pitch` is Copyright 2022 Spotify AB.
-
-This software is licensed under the Apache License, Version 2.0 (the "Apache License"). You may choose either license to govern your use of this software only upon the condition that you accept all the terms of either the Apache License.
-
-You may obtain a copy of the Apache License at:
-
-http://www.apache.org/licenses/LICENSE-2.0
