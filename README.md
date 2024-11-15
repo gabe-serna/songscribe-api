@@ -23,7 +23,7 @@ To exit, press `ctrl + C` on Windows or `cmd + C` on Mac
 
 Visit [`localhost:8000/docs`](http://localhost:8000/docs) for a list of all available endpoints with details, along with tools for testing the endpoint.
 
-Documentation about the endpoints of the API can be found in [DOCS.md](https://github.com/gabe-serna/songscribe-api/blob/main/README.md) or at [Dockerhub](https://hub.docker.com/r/gabeserna/songscribe-api).
+Documentation about the endpoints of the API can be found in [DOCS.md](https://github.com/gabe-serna/songscribe-api/blob/main/DOCS.md) or at [Dockerhub](https://hub.docker.com/r/gabeserna/songscribe-api).
 
 <br/><br/>
 
