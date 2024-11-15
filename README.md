@@ -45,6 +45,72 @@ You can check to see if the API is running by going to [`localhost:8000/docs`](h
 
 > *The Docker image may take between 5-15 minutes to pull depending primarily on your network speed.*
 
+<br/>
+
+### Hosting with Docker
+To run the Docker container from a scratch on a Ubuntu server *(for hosting)*, follow these instructions:
+
+If Docker is not installed yet, run the following commands:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+```
+<br/>
+
+Then pull the image from Docker Hub *(will take between 5-15 minutes depending on your network speed)*:
+
+```bash
+sudo docker pull gabeserna/songscribe-api:latest
+```
+<br/>
+
+Start the container and verify that it is running:
+
+```bash
+sudo docker run -d -p 8000:8000 gabeserna/songscribe-api:latest
+sudo docker ps
+```
+<br/>
+
+**Optional:** To monitor the container's output run the following command to view logs in real-time:
+
+```bash
+sudo docker logs -f <container_id>
+```
+<br/>
+
+**Optional:** Clean Up Old Containers and Images
+
+- List all containers (including stopped ones):
+  ```bash
+  sudo docker ps -a
+  ```
+
+- Remove stopped containers:
+  ```bash
+  sudo docker rm <container_id>
+  ```
+
+- Remove unused images:
+  ```bash
+  sudo docker rmi <image_id>
+  ```
+
+<br/>
+
+Use your server's public IP address to access the application: `http://<your_server_ip>:8000`
+
+If you don't know what the server's public IP address is, you can run:
+
+```bash
+curl ifconfig.me
+```
+
 <br/><br/>
 
 ## Manual Installation
