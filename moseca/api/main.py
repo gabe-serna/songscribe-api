@@ -1,4 +1,3 @@
-import asyncio
 from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +6,8 @@ from pathlib import Path
 from zipfile import ZipFile
 from enum import Enum
 from mido import MidiFile, MetaMessage
+import asyncio
+import logging
 import shutil
 import concurrent.futures
 import os
@@ -34,6 +35,7 @@ from adtof.model.model import Model
 # Import YouTube audio downloader
 from moseca.api.service.youtube import download_audio_from_youtube
 
+logging.basicConfig(level=logging.ERROR)
 app = FastAPI()
 
 # Allow CORS from frontend dev environment (localhost:3000)
@@ -368,6 +370,7 @@ async def audio_to_midi(
     onset_threshold = onset_threshold if onset_threshold is not None else 0.5
     frame_threshold = frame_threshold if frame_threshold is not None else 0.3
     minimum_note_length = minimum_note_length if minimum_note_length is not None else 127.70
+    minimum_frequency = minimum_frequency if minimum_frequency != 0 else None
     tempo = tempo if tempo is not None else 120
 
     try:

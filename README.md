@@ -227,12 +227,12 @@ Start the FastAPI server using Uvicorn:
 uvicorn moseca.api.main:app
 ```
 
-Just to note, you will see some Tensorflow warnings as the server is being started. You can safely ignore these. The server will be up and running once you see the following message in your terminal:
+The server will be up and running once you see the following message in your terminal:
 ```text
 INFO:     Started server process [1]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 ```
 
 ### 8. Access the API Documentation
