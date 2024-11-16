@@ -82,6 +82,7 @@ sudo docker ps
 ```bash
 sudo docker logs -f <container_id>
 ```
+> To exit out of real-time logs, press `ctrl + C` on Windows or `cmd + C` on Mac
 <br/>
 
 **Optional:** Clean Up Old Containers and Images

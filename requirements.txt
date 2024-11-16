@@ -1,4 +1,4 @@
-# Songscribe API v1.1.1
+# Songscribe API v1.2.0
 # Combined Requirements for Moseca, Basic Pitch, and ADTOF
 
 # Core Libraries
@@ -129,7 +129,7 @@ Werkzeug==3.0.6
 wheel==0.44.0
 win32-setctime==1.1.0
 wrapt==1.14.1
-yt-dlp==2023.7.6
+yt-dlp==2024.11.4
 
 # Git-Installed Packages
 ADTOF @ git+https://github.com/MZehren/ADTOF@d87f54777f0275901dffc09364aa4c9d7356a360
