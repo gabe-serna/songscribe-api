@@ -14,6 +14,8 @@ import os
 import tempfile
 import mido
 
+logging.basicConfig(level=logging.ERROR)
+
 # For /split-audio and /split-yt-audio
 from moseca.api.service.demucs_runner import separator
 from moseca.api.align_audio import align_audio
@@ -35,13 +37,14 @@ from adtof.model.model import Model
 # Import YouTube audio downloader
 from moseca.api.service.youtube import download_audio_from_youtube
 
-logging.basicConfig(level=logging.ERROR)
 app = FastAPI()
 
-# Allow CORS from frontend dev environment (localhost:3000)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://songscribe.xyz", "https://songscribe.vercel.app"],
+    allow_origins=["http://localhost:3000",  # For development
+                   "https://songscribe.xyz",  # Production frontend
+                   "https://songscribe.vercel.app,"  # Vercel deployment
+                   "https://api.songscribe.xyz"],  # Backend subdomain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -47,6 +47,9 @@ def download_audio_from_youtube(url, output_path):
     video_title = _sanitize_filename(video_title)
 
     ydl_opts = {
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
         "format": "bestaudio/best",
         "postprocessors": [
             {
@@ -57,6 +60,8 @@ def download_audio_from_youtube(url, output_path):
         ],
         "outtmpl": os.path.join(output_path, video_title),
         "quiet": True,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

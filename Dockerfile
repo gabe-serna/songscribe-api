@@ -4,7 +4,10 @@ FROM python:3.11-slim AS builder
 # Set environment variables for Python
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONUTF8=1
+    PYTHONUTF8=1 \
+    PYTHONWARNINGS="ignore" \
+    TF_ENABLE_ONEDNN_OPTS=0 \
+    TF_CPP_MIN_LOG_LEVEL=3
 
 # Install system dependencies required for building Python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -39,7 +42,10 @@ FROM python:3.11-slim AS final
 # Set environment variables for Python
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONUTF8=1
+    PYTHONUTF8=1 \
+    PYTHONWARNINGS="ignore" \
+    TF_ENABLE_ONEDNN_OPTS=0 \
+    TF_CPP_MIN_LOG_LEVEL=3
 
 # Install only the runtime dependencies required by your application
 RUN apt-get update && apt-get install -y --no-install-recommends \
